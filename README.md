@@ -1,5 +1,7 @@
 # 💧 Aquametro — Controle de Consumo de Água
 
+**🔗 Acesse:** https://aquametro.geraldojunior.dev
+
 App web (PWA) para acompanhar o consumo de água da sua casa ao longo do ciclo de faturamento da concessionária e não estourar a meta. Você registra as leituras do hidrômetro e o app calcula consumo, média diária, projeção do ciclo e quanto ainda pode gastar por dia.
 
 Tudo roda **100% no navegador** — sem back-end, sem cadastro. Os dados ficam salvos localmente no seu dispositivo (`localStorage`).
@@ -42,12 +44,27 @@ Depois é só registrar novas leituras conforme for consultando o medidor.
 
 ## Deploy
 
-Qualquer hospedagem de arquivos estáticos serve (GitHub Pages, Netlify, Vercel, Cloudflare Pages etc.). Publique o conteúdo da pasta `src/` como raiz do site — não há etapa de build.
+O app é publicado na **Cloudflare Pages**, com deploy contínuo a partir do GitHub: todo `push` na branch `main` dispara um novo deploy automaticamente.
+
+- **Produção:** https://aquametro.geraldojunior.dev
+- **URL do Pages:** https://aquametro.pages.dev
+
+Configuração do projeto na Cloudflare Pages:
+
+| Opção | Valor |
+| --- | --- |
+| Repositório | `geraldoantonio/aquametro` |
+| Branch de produção | `main` |
+| Comando de build | *(vazio — site estático)* |
+| Diretório de saída | `src` |
+
+> Por ser um site estático, qualquer outra hospedagem (GitHub Pages, Netlify, Vercel etc.) também funciona — basta publicar o conteúdo da pasta `src/` como raiz do site, sem etapa de build.
 
 ## Estrutura
 
 ```
 .
+├── LICENSE                     # Licença MIT
 ├── Makefile                    # Atalhos (make dev)
 ├── README.md
 └── src/                        # Fontes do app (raiz publicada)
@@ -74,3 +91,7 @@ Qualquer hospedagem de arquivos estáticos serve (GitHub Pages, Netlify, Vercel,
 ## Privacidade
 
 Nenhum dado sai do seu dispositivo. Não há servidor, telemetria ou coleta de informações — todas as leituras ficam apenas no navegador onde foram registradas.
+
+## Licença
+
+Distribuído sob a licença [MIT](LICENSE). Sinta-se livre para usar, copiar e modificar.

@@ -111,4 +111,8 @@ body{
 .histrow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
 .histrow:last-child{border:none}
 
+.foot{text-align:center;margin-top:22px;font-size:12px;color:var(--mut2)}
+.foot a{color:var(--aqua);text-decoration:none;font-weight:600}
+.foot a:active,.foot a:hover{text-decoration:underline}
+
 @keyframes wavemove{from{transform:translateX(0)}to{transform:translateX(-100px)}}
