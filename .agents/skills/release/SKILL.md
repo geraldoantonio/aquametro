@@ -1,99 +1,107 @@
 ---
 name: release
 description: >-
-  Publica uma nova versão do Aquametro seguindo o fluxo de release do projeto:
-  bumpa o semver em src/js/version.js, valida no navegador, commita, cria a tag
-  git vX.Y.Z, faz push e abre o GitHub release com notas em pt-BR. Dispare quando
-  o Geraldo disser "faz o release", "lança a versão", "publica a v0.2.0", "bumpa
-  pra minor/patch/major", "cria o release da próxima versão" ou similar.
-  NÃO é read-only: edita arquivo, commita, cria tag, faz push e publica release.
+  Ship a new Aquametro version following the project's release flow: bump the
+  semver in src/js/version.js, validate in the browser, commit, create the git
+  tag vX.Y.Z, push, and open the GitHub release with pt-BR notes. Trigger when
+  the user asks to release, cut, or publish a version, or to bump patch/minor/
+  major — in English ("release the next version", "cut v0.2.0", "bump minor")
+  or Portuguese ("faz o release", "lança a versão", "publica a v0.2.0").
+  NOT read-only: edits a file, commits, tags, pushes, and publishes a release.
 ---
 
-# Fazer o release de uma nova versão
+# Release a new version
 
-Objetivo: levar o Aquametro de uma versão à próxima de forma consistente — uma
-única fonte da verdade (`APP_VERSION`), tag git e GitHub release, sem esquecer
-nenhum passo nem dessincronizar cache do Service Worker e rodapé.
+Goal: move Aquametro from one version to the next consistently — one source of
+truth (`APP_VERSION`), a git tag, and a GitHub release — without missing a step
+or desyncing the Service Worker cache and the footer.
 
-Esta skill **escreve estado** (edita arquivo, commita, tag, push, publica release)
-e é **user-invoked** — o Geraldo a dispara explicitamente. Cada passo que publica
-(push, GitHub release) só acontece depois de confirmação.
+This skill **writes state** (edits a file, commits, tags, pushes, publishes a
+release) and is **user-invoked** — the user triggers it explicitly. Every
+publishing step (push, GitHub release) happens only after confirmation.
 
-## Contexto fixo deste projeto
+## Language
 
-- Repo GitHub: **`geraldoantonio/aquametro`**. Commits em inglês (regra do AGENTS.md).
-- **Fonte única da versão**: `src/js/version.js` → `const APP_VERSION = "X.Y.Z"`.
-  É o **único** arquivo a editar no bump. O `src/sw.js` deriva o cache dela
-  (`CACHE = "controle-agua-v" + APP_VERSION`) e o rodapé renderiza via a chave i18n
-  `footer.version` — **não** edite `sw.js` nem o rodapé só por causa da versão.
-- Versionamento **semver** `MAJOR.MINOR.PATCH`, ainda em fase `0.x` (pré-1.0):
-  - **PATCH** (`0.1.1`) → bugfix, ajuste de texto/estilo.
-  - **MINOR** (`0.2.0`) → funcionalidade nova compatível.
-  - **MAJOR** (`1.0.0`) → primeiro estável ou mudança que quebra dados do `localStorage`.
-- Notas de release em **pt-BR** (convenção do `README.md`, que é o único arquivo em pt).
-- Validação é **no navegador** — não há suíte de testes (regra do AGENTS.md).
+Default working language is **English**: ask questions and report in English.
+If invoked with the **`pt-br`** flag (e.g. `/release pt-br`), interact and report
+in **pt-BR** instead. Either way, the **GitHub release notes are always written in
+pt-BR** — they are product-facing and follow the `README.md` convention.
 
-## Requisitos
+## Fixed project context
 
-Não vêm com a skill; precisam existir na sessão:
+- GitHub repo: **`geraldoantonio/aquametro`**. Commits in English (AGENTS.md rule).
+- **Single source of version truth**: `src/js/version.js` → `const APP_VERSION = "X.Y.Z"`.
+  It is the **only** file to edit for the bump. `src/sw.js` derives the cache from it
+  (`CACHE = "controle-agua-v" + APP_VERSION`) and the footer renders it via the i18n
+  key `footer.version` — do **not** edit `sw.js` or the footer just for the version.
+- **Semver** `MAJOR.MINOR.PATCH`, still in `0.x` (pre-1.0):
+  - **PATCH** (`0.1.1`) → bugfix, text/style tweak.
+  - **MINOR** (`0.2.0`) → new backward-compatible feature.
+  - **MAJOR** (`1.0.0`) → first stable, or a change that breaks `localStorage` data.
+- Release notes in **pt-BR** (the `README.md` is the only pt-file; keep notes in pt).
+- Validation is **in the browser** — there is no test suite (AGENTS.md rule).
 
-- **`gh` (GitHub CLI)** instalado e autenticado (`gh auth status` ok). Se não estiver
-  no PATH, use `/opt/homebrew/bin/gh`.
-- **`git`** com o repo limpo (sem mudanças não commitadas que não sejam do release).
-- **Chrome MCP** (`mcp__claude-in-chrome__*`) disponível para a validação — se não
-  estiver, avise e siga com uma validação mais fraca (curl), sem pular a etapa em silêncio.
+## Requirements
 
-## Como fazer perguntas
+Not bundled with the skill; must exist in the session:
 
-Toda pergunta ao Geraldo é de **múltipla escolha** (`AskUserQuestion`):
-- Ofereça opções prontas; a 1ª é a recomendada e leva `(Recomendado)` no rótulo.
-- Nunca crie opção "Outro" — o campo custom aparece sozinho.
+- **`gh` (GitHub CLI)** installed and authenticated (`gh auth status` ok). If not on
+  the PATH, use `/opt/homebrew/bin/gh`.
+- **`git`** with a clean working tree (aside from the release changes).
+- **Chrome MCP** (`mcp__claude-in-chrome__*`) for validation — if unavailable, say so
+  and fall back to a weaker check (curl), never skip the step silently.
+
+## Asking questions
+
+Every question to the user is multiple-choice (`AskUserQuestion`):
+- Offer ready options; the 1st is recommended and carries `(Recommended)`.
+- Never add an "Other" option — the custom field shows up on its own.
 
 ## Preflight
 
-Antes de tudo:
+First:
 
 ```bash
-git -C /Users/geraldo-jr/Developer/aquametro status --short   # deve estar limpo
+git -C /Users/geraldo-jr/Developer/aquametro status --short   # should be clean
 grep APP_VERSION /Users/geraldo-jr/Developer/aquametro/src/js/version.js
-git -C /Users/geraldo-jr/Developer/aquametro describe --tags --abbrev=0   # última tag
+git -C /Users/geraldo-jr/Developer/aquametro describe --tags --abbrev=0   # last tag
 gh auth status 2>&1 | head -3
 ```
 
-Se o working tree tiver mudanças alheias ao release, **pare** e pergunte se deve
-incluí-las, commitá-las à parte, ou abortar. Não commite às cegas.
+If the working tree has changes unrelated to the release, **stop** and ask whether
+to include them, commit them separately, or abort. Do not commit blindly.
 
-## 1. Decidir a nova versão
+## 1. Decide the new version
 
-A partir da versão atual (`version.js`) e da última tag, proponha a próxima.
-Se o Geraldo não disse o tipo do bump, pergunte com `AskUserQuestion` oferecendo
-PATCH / MINOR / MAJOR já com os números calculados (ex.: atual `0.1.0` → opções
-`0.1.1`, `0.2.0`, `1.0.0`). Deixe a recomendação alinhada ao que os commits desde
-a última tag sugerem (só fix → patch; feature nova → minor).
+From the current version (`version.js`) and the last tag, propose the next one.
+If the user didn't state the bump type, ask via `AskUserQuestion`, offering
+PATCH / MINOR / MAJOR with the numbers precomputed (e.g. current `0.1.0` → options
+`0.1.1`, `0.2.0`, `1.0.0`). Align the recommendation with what the commits since the
+last tag suggest (only fixes → patch; new feature → minor).
 
-## 2. Bumpar a versão
+## 2. Bump the version
 
-Edite **somente** `src/js/version.js`, trocando o valor de `APP_VERSION`. Nada mais.
+Edit **only** `src/js/version.js`, changing the value of `APP_VERSION`. Nothing else.
 
-## 3. Validar no navegador
+## 3. Validate in the browser
 
-Sirva e confirme que rodapé e Service Worker refletem a nova versão:
+Serve and confirm the footer and Service Worker reflect the new version:
 
 ```bash
 cd /Users/geraldo-jr/Developer/aquametro && make dev PORT=8123 >/tmp/aqua-dev.log 2>&1 &
 sleep 1.5
 ```
 
-Com o Chrome MCP, navegue até `http://localhost:8123/` e cheque:
-- `document.getElementById("version").textContent` → `vX.Y.Z` (a nova)
-- `navigator.serviceWorker.controller.scriptURL` presente (SW registrou) e sem erros no console
+With Chrome MCP, navigate to `http://localhost:8123/` and check:
+- `document.getElementById("version").textContent` → `vX.Y.Z` (the new one)
+- `navigator.serviceWorker.controller.scriptURL` present (SW registered) and no console errors
 
-Depois **encerre o server** (`pkill -f 8123`). Se algo não bater, **pare** e mostre
-o problema antes de commitar.
+Then **stop the server** (`pkill -f 8123`). If anything is off, **stop** and show the
+problem before committing.
 
 ## 4. Commit + tag
 
-Mensagem de commit em **inglês**. Use o template abaixo (ajuste a 1ª linha ao conteúdo):
+Commit message in **English**. Use the template below (tailor the first line):
 
 ```bash
 cd /Users/geraldo-jr/Developer/aquametro
@@ -101,7 +109,7 @@ git add -A
 git commit -m "$(cat <<'EOF'
 Release vX.Y.Z
 
-<uma linha em inglês resumindo o que entra nesta versão>
+<one English line summarizing what ships in this version>
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF
@@ -111,7 +119,7 @@ git tag vX.Y.Z
 
 ## 5. Push
 
-Confirme com o Geraldo antes (publicar é irreversível na prática). Depois:
+Confirm with the user first (publishing is effectively irreversible). Then:
 
 ```bash
 git push && git push --tags
@@ -119,13 +127,14 @@ git push && git push --tags
 
 ## 6. GitHub release
 
-Gere as notas em **pt-BR** a partir dos commits desde a tag anterior:
+Generate the notes in **pt-BR** from the commits since the previous tag:
 
 ```bash
-git log --oneline <tag-anterior>..vX.Y.Z
+git log --oneline <previous-tag>..vX.Y.Z
 ```
 
-Traduza/resuma em bullets de usuário (não cole o log cru). Estrutura sugerida:
+Translate/summarize into user-facing bullets (do not paste the raw log). Suggested
+structure:
 
 ```
 <frase de contexto do que esta versão traz>
@@ -137,18 +146,19 @@ Traduza/resuma em bullets de usuário (não cole o log cru). Estrutura sugerida:
 <nota final se for pré-1.0 ou tiver algo a avisar>
 ```
 
-Publique (marque `--prerelease` enquanto for `0.x`, se o Geraldo preferir sinalizar
-instabilidade — pergunte se não estiver claro):
+Publish (add `--prerelease` while on `0.x` if the user wants to signal instability —
+ask if unclear):
 
 ```bash
 gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
-<notas em pt-BR>
+<pt-BR notes>
 EOF
 )"
 ```
 
-## Saída final
+## Final report
 
-Reporte, conciso: nova versão, hash do commit, tag, e o **link do release**.
-Se algum passo foi pulado (ex.: validação sem Chrome MCP), diga qual e por quê —
-nunca reporte como concluído o que não rodou.
+Report, concisely (in the working language — pt-BR if the `pt-br` flag was passed):
+new version, commit hash, tag, and the **release link**. If a step was skipped
+(e.g. validation without Chrome MCP), say which and why — never report as done what
+did not run.

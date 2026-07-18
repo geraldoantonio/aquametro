@@ -87,3 +87,18 @@ new cycle).
 
 - Write commit messages in **English**.
 - Do not `push` unless the user asks.
+
+## Versioning and releases
+
+- The app is versioned with **semver** (`MAJOR.MINOR.PATCH`), still in `0.x` (pre-1.0):
+  PATCH = bugfix/text/style, MINOR = new backward-compatible feature, MAJOR = first
+  stable or a change that breaks `localStorage` data.
+- **Single source of truth**: `src/js/version.js` → `const APP_VERSION`. It is the only
+  place to edit on a bump. `src/sw.js` derives its cache name from it
+  (`CACHE = "controle-agua-v" + APP_VERSION`) and the footer renders it via the i18n
+  key `footer.version` — do **not** hardcode the version in `sw.js` or the footer.
+- Each release gets a matching git tag `vX.Y.Z` and a GitHub release (repo
+  `geraldoantonio/aquametro`) with **pt-BR** notes, matching the `README.md` convention.
+- The full flow is automated by the **`release` skill** (`.agents/skills/release/`);
+  run it with `/release` (or `/release pt-br` for a pt-BR interaction) instead of doing
+  the steps by hand.
