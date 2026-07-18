@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- Dev/test page: served from src/ root, so vendor/ and js/ resolve from "/" -->
+<base href="/" />
+<title>OCR · Teste de leitura de medidor</title>
+<style>
+  :root{
+    --ink:#071a26; --ink2:#0c2635; --surf:#113247; --surf2:#0e2a3c;
+    --line:#1d4257; --aqua:#37e0c8; --aqua-d:#1fb6a2; --blue:#57b0e6;
+    --amber:#f6b45a; --coral:#ff6b7d; --txt:#e9f6f7; --mut:#7fa0b0; --mut2:#5a7d8d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ink);color:var(--txt);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+    line-height:1.5;padding:24px 16px 64px;
+    background:radial-gradient(1200px 500px at 82% -8%,rgba(55,224,200,.10),transparent 60%),var(--ink)}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:22px;letter-spacing:-.4px;margin-bottom:4px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:6px}
+  .warn{background:rgba(246,180,90,.1);border:1px solid var(--amber);border-radius:10px;
+    padding:10px 13px;font-size:12.5px;color:#f6d59a;margin:14px 0}
+  .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}
+  .btn{border:none;border-radius:11px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer;
+    font-family:inherit;background:linear-gradient(150deg,var(--aqua),var(--aqua-d));color:#04222a}
+  .btn.ghost{background:var(--surf2);color:var(--txt);border:1px solid var(--line)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .score{font-family:'Courier New',monospace;font-size:14px;color:var(--mut)}
+  .score b{color:var(--txt)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  .case{background:linear-gradient(180deg,var(--surf),var(--surf2));border:1px solid var(--line);
+    border-radius:16px;padding:14px}
+  .case .clabel{font-size:12px;color:var(--mut);letter-spacing:.04em;margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:center}
+  .case canvas{width:100%;height:auto;border-radius:8px;display:block;background:#000;border:1px solid #16323f}
+  .row{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .exp{font-family:'Courier New',monospace;font-size:13px;color:var(--mut)}
+  .exp b{color:var(--txt)}
+  .res{font-family:'Courier New',monospace;font-size:14px;font-weight:700;letter-spacing:.06em}
+  .res .tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:8px;letter-spacing:.03em}
+  .ok{color:var(--aqua)} .ok .tag{background:var(--aqua);color:#04222a}
+  .bad{color:var(--coral)} .bad .tag{background:rgba(255,107,125,.15);color:var(--coral);border:1px solid var(--coral)}
+  .part{color:var(--amber)} .part .tag{background:rgba(246,180,90,.15);color:var(--amber);border:1px solid var(--amber)}
+  .meta{font-size:11px;color:var(--mut2);margin-top:4px;width:100%}
+  .btn.sm{padding:8px 13px;font-size:13px;margin-left:auto}
+  .sec{margin-top:34px;border-top:1px solid var(--line);padding-top:24px}
+  .sec h2{font-size:17px;margin-bottom:4px}
+  .drop{margin-top:14px;border:1px dashed var(--line);border-radius:14px;padding:20px;text-align:center;
+    background:var(--surf2)}
+  .drop input{display:none}
+  .drop label{display:inline-block;background:var(--aqua);color:#04222a;font-weight:700;font-size:14px;
+    padding:11px 18px;border-radius:11px;cursor:pointer}
+  .drop .hint{font-size:12px;color:var(--mut2);margin-top:10px}
+  #photoWrap{margin-top:16px;display:none}
+  #photoCrop{width:100%;max-width:420px;border-radius:10px;border:1px solid #16323f;display:block;margin:0 auto 12px}
+  #photoRes{text-align:center;font-family:'Courier New',monospace;font-size:16px;font-weight:700}
+  .foot{margin-top:40px;font-size:11px;color:var(--mut2);text-align:center;line-height:1.6}
+  code{font-family:'Courier New',monospace;background:#04141c;border:1px solid #16323f;border-radius:4px;
+    padding:1px 5px;color:#bfeee7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OCR · Teste de leitura de medidor</h1>
+  <div class="sub">Roda o <b>mesmo motor</b> do app (<code>Ocr.recognizeCanvas</code> + <code>Ocr.preprocess</code>, Tesseract vendorizado) sobre medidores sintéticos de valor conhecido — pra medir precisão sem depender da câmera.</div>
+  <div id="engineWarn" class="warn" style="display:none"></div>
+
+  <div class="bar">
+    <button class="btn" id="runAll">Ler todos</button>
+    <button class="btn ghost" id="redraw">Redesenhar</button>
+    <span class="score" id="score">—</span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="sec">
+    <h2>Testar sua foto</h2>
+    <div class="sub">Tire ou escolha uma foto de um hidrômetro real. Ela passa pelo mesmo recorte central + pré-processamento + OCR do app.</div>
+    <div class="drop">
+      <label for="photo">📷 Escolher / tirar foto</label>
+      <input type="file" id="photo" accept="image/*" capture="environment" />
+      <div class="hint">A leitura acontece 100% no dispositivo. Nada é enviado a lugar nenhum.</div>
+    </div>
+    <div id="photoWrap">
+      <canvas id="photoCrop"></canvas>
+      <div id="photoRes">—</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Página de desenvolvimento — não faz parte do app publicado, não é referenciada por ele nem cacheada pelo Service Worker.<br>
+    Medidores desenhados via canvas (sem imagens externas). O "esperado" é a parte preta (m³ inteiros), que é o que o app lê.
+  </div>
+</div>
+
+<script src="js/ocr.js"></script>
+<script>
+/* ---- rounded-rect helper (polyfill for older canvas) ---- */
+function rr(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+/* ---- meter drawers ---- */
+function drawDigital(ctx, W, H, value, opts) {
+  opts = opts || {};
+  const lc = opts.contrast === "low";
+  ctx.fillStyle = lc ? "#33393c" : "#0a1418"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = lc ? "#5f686d" : "#eafcff";
+  ctx.font = 'bold ' + Math.round(H * 0.5) + 'px "Courier New",monospace';
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(value.split("").join(" "), W / 2, H / 2 + 2);
+}
+function drawWheels(ctx, W, H, black, red, opts) {
+  opts = opts || {}; red = red || "";
+  ctx.fillStyle = "#1b2124"; ctx.fillRect(0, 0, W, H);
+  const items = black.split("").map((d) => ({ d, red: false }))
+    .concat(red.split("").map((d) => ({ d, red: true })));
+  const n = items.length, gap = 5, pad = 18;
+  const bw = (W - 2 * pad - (n - 1) * gap) / n;
+  const bh = H * 0.72, top = (H - bh) / 2;
+  items.forEach((it, i) => {
+    const x = pad + i * (bw + gap);
+    ctx.fillStyle = it.red ? "#c1212f" : "#f5f4ef"; rr(ctx, x, top, bw, bh, 4); ctx.fill();
+    const g = ctx.createLinearGradient(0, top, 0, top + bh);
+    g.addColorStop(0, "rgba(0,0,0,.28)"); g.addColorStop(.5, "rgba(255,255,255,.12)"); g.addColorStop(1, "rgba(0,0,0,.28)");
+    ctx.fillStyle = g; rr(ctx, x, top, bw, bh, 4); ctx.fill();
+    ctx.fillStyle = it.red ? "#fff" : "#141414";
+    ctx.font = 'bold ' + Math.round(bh * 0.6) + 'px Arial,sans-serif';
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(it.d, x + bw / 2, top + bh / 2 + 1);
+  });
+  if (opts.glare) {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(.35, "rgba(255,255,255,0)"); g.addColorStop(.5, "rgba(255,255,255,.6)"); g.addColorStop(.65, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/* ---- test cases (expected = black integer, what the app reads) ---- */
+const TESTS = [
+  { id: "digital", label: "Digital limpo", expected: "01234", draw: (c, W, H) => drawDigital(c, W, H, "01234") },
+  { id: "wheels", label: "Odômetro (rodas)", expected: "38472", draw: (c, W, H) => drawWheels(c, W, H, "38472") },
+  { id: "red", label: "Com decimal vermelho", expected: "38472", note: "o vermelho não deve entrar", draw: (c, W, H) => drawWheels(c, W, H, "38472", "5") },
+  { id: "glare", label: "Reflexo / brilho", expected: "05820", draw: (c, W, H) => drawWheels(c, W, H, "05820", "", { glare: true }) },
+  { id: "rot", label: "Levemente girado (4°)", expected: "71095", rotate: 4, draw: (c, W, H) => drawWheels(c, W, H, "71095") },
+  { id: "lowc", label: "Baixo contraste", expected: "46013", draw: (c, W, H) => drawDigital(c, W, H, "46013", { contrast: "low" }) },
+];
+
+const CW = 560, CH = 150;
+const cards = {};
+
+function renderCard(t) {
+  const el = document.createElement("div");
+  el.className = "case";
+  el.innerHTML =
+    '<div class="clabel"><span>' + t.label + '</span></div>' +
+    '<canvas width="' + CW + '" height="' + CH + '"></canvas>' +
+    '<div class="row"><span class="exp">esperado: <b>' + t.expected + '</b></span>' +
+    '<button class="btn sm" data-id="' + t.id + '">Ler</button>' +
+    '<span class="res" id="res-' + t.id + '"></span>' +
+    '<span class="meta" id="meta-' + t.id + '"></span></div>';
+  document.getElementById("grid").appendChild(el);
+  const canvas = el.querySelector("canvas");
+  cards[t.id] = canvas;
+  drawCanvas(canvas, t);
+}
+
+function drawCanvas(canvas, t) {
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#0a0f12"; ctx.fillRect(0, 0, CW, CH); // frame border color at corners when rotated
+  ctx.save();
+  if (t.rotate) { ctx.translate(CW / 2, CH / 2); ctx.rotate(t.rotate * Math.PI / 180); ctx.translate(-CW / 2, -CH / 2); }
+  t.draw(ctx, CW, CH);
+  ctx.restore();
+}
+
+function copyCanvas(src) {
+  const c = document.createElement("canvas");
+  c.width = src.width; c.height = src.height;
+  c.getContext("2d").drawImage(src, 0, 0);
+  return c;
+}
+
+function showResult(id, expected, res, ms) {
+  const resEl = document.getElementById("res-" + id);
+  const metaEl = document.getElementById("meta-" + id);
+  const got = res.value || "∅";
+  let cls, tag;
+  if (got === expected) { cls = "ok"; tag = "OK"; }
+  else if (got.indexOf(expected) === 0) { cls = "part"; tag = "PARCIAL"; }
+  else { cls = "bad"; tag = "ERRO"; }
+  resEl.className = "res " + cls;
+  resEl.innerHTML = got + '<span class="tag">' + tag + "</span>";
+  metaEl.textContent = "confiança " + res.confidence + "% · " + ms + "ms" +
+    (got !== expected ? " · leu “" + got + "”, esperado “" + expected + "”" : "");
+}
+
+let engineReady = false;
+async function runOne(t, btn) {
+  const label = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = engineReady ? "…" : "carregando…"; }
+  try {
+    const tmp = copyCanvas(cards[t.id]);
+    Ocr.preprocess(tmp);
+    const t0 = performance.now();
+    const res = await Ocr.recognizeCanvas(tmp);
+    const ms = Math.round(performance.now() - t0);
+    engineReady = true;
+    showResult(t.id, t.expected, res, ms);
+    return res.value === t.expected;
+  } catch (e) {
+    document.getElementById("res-" + t.id).innerHTML = '<span class="bad">falhou: ' + e.message + "</span>";
+    return false;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Ler"; }
+  }
+}
+
+async function runAll() {
+  const btn = document.getElementById("runAll");
+  btn.disabled = true; btn.textContent = "Lendo…";
+  let ok = 0;
+  for (const t of TESTS) { if (await runOne(t)) ok++; }
+  document.getElementById("score").innerHTML = "acertos: <b>" + ok + " / " + TESTS.length + "</b>";
+  btn.disabled = false; btn.textContent = "Ler todos";
+}
+
+/* ---- photo test ---- */
+function cropCenter(src, wFrac, hFrac) {
+  const sw = src.width, sh = src.height;
+  const cw = Math.round(sw * wFrac), ch = Math.round(sh * hFrac);
+  const cx = Math.round((sw - cw) / 2), cy = Math.round((sh - ch) / 2);
+  const scale = Math.min(3, Math.max(1, 900 / cw));
+  const c = document.createElement("canvas");
+  c.width = Math.round(cw * scale); c.height = Math.round(ch * scale);
+  c.getContext("2d").drawImage(src, cx, cy, cw, ch, 0, 0, c.width, c.height);
+  return c;
+}
+async function onPhoto(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = async () => {
+    const scale = Math.min(1, 1200 / img.width);
+    const scene = document.createElement("canvas");
+    scene.width = Math.round(img.width * scale); scene.height = Math.round(img.height * scale);
+    scene.getContext("2d").drawImage(img, 0, 0, scene.width, scene.height);
+    const crop = cropCenter(scene, 0.82, 0.34);
+    const preview = document.getElementById("photoCrop");
+    preview.width = crop.width; preview.height = crop.height;
+    preview.getContext("2d").drawImage(crop, 0, 0);
+    document.getElementById("photoWrap").style.display = "block";
+    const resEl = document.getElementById("photoRes");
+    resEl.textContent = "lendo…";
+    try {
+      const tmp = copyCanvas(crop);
+      Ocr.preprocess(tmp);
+      const res = await Ocr.recognizeCanvas(tmp);
+      resEl.innerHTML = res.value
+        ? 'leu: <span class="ok">' + res.value + "</span> · confiança " + res.confidence + "%"
+        : '<span class="bad">nenhum dígito reconhecido</span>';
+    } catch (err) {
+      resEl.innerHTML = '<span class="bad">falhou: ' + err.message + "</span>";
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+/* ---- init ---- */
+if (typeof Ocr === "undefined" || !Ocr.recognizeCanvas) {
+  document.getElementById("engineWarn").style.display = "block";
+  document.getElementById("engineWarn").textContent =
+    "Motor de OCR não carregou (js/ocr.js). Sirva a partir da raiz de src/ (make dev).";
+} else {
+  TESTS.forEach(renderCard);
+  document.getElementById("runAll").addEventListener("click", runAll);
+  document.getElementById("redraw").addEventListener("click", () => TESTS.forEach((t) => drawCanvas(cards[t.id], t)));
+  document.getElementById("grid").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-id]");
+    if (b) runOne(TESTS.find((t) => t.id === b.dataset.id), b);
+  });
+  document.getElementById("photo").addEventListener("change", onPhoto);
+}
+</script>
+</body>
+</html>
