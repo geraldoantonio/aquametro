@@ -91,8 +91,15 @@ body{
 .field{margin-bottom:14px}
 .flabel{font-size:12px;color:var(--mut);margin-bottom:7px;display:block;font-weight:500}
 .input{width:100%;background:#04141c;border:1px solid var(--line);border-radius:12px;
-  padding:13px 14px;color:var(--txt);font-size:16px;font-family:'Space Mono';outline:none;transition:.15s}
+  padding:13px 14px;color:var(--txt);font-size:16px;font-family:'Space Mono';outline:none;transition:.15s;
+  color-scheme:dark}
 .input:focus{border-color:var(--aqua-d);box-shadow:0 0 0 3px rgba(55,224,200,.12)}
+/* color-scheme:dark already renders the picker indicator light; don't invert it
+   (that flipped it back to dark → invisible). A subtle sepia+hue tint nudges it aqua. */
+.input[type="date"]::-webkit-calendar-picker-indicator{
+  cursor:pointer;opacity:.85;
+  filter:brightness(1.1) sepia(1) hue-rotate(120deg) saturate(4)}
+.input[type="date"]::-webkit-calendar-picker-indicator:hover{opacity:1}
 .btn{width:100%;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;
   font-family:'Inter';display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s;margin-bottom:14px}
 .btn:active{transform:scale(.99)}
@@ -131,3 +138,81 @@ body{
 .version{display:block;margin-top:4px;font-size:11px;opacity:.7}
 
 @keyframes wavemove{from{transform:translateX(0)}to{transform:translateX(-100px)}}
+
+/* ---- camera trigger inside the value field ---- */
+.inputwrap{position:relative}
+.inputwrap .input{padding-right:52px}
+.cambtn{position:absolute;top:50%;right:6px;transform:translateY(-50%);width:40px;height:40px;
+  border-radius:10px;border:1px solid var(--line);background:var(--surf);color:var(--aqua);
+  display:grid;place-items:center;cursor:pointer;transition:.15s}
+.cambtn:active{transform:translateY(-50%) scale(.94)}
+
+/* ---- split meter value: black m³ integer , red liters ---- */
+.valrow{display:flex;align-items:center;gap:8px}
+.valmain{flex:1;min-width:0}
+.valrow .valdec{flex:none;width:92px;text-align:center;font-size:15px;color:#ff8f9c}
+.valrow .valdec::placeholder{color:var(--mut2)}
+.valsep{flex:none;font-family:'Space Mono';font-weight:700;font-size:24px;color:var(--mut)}
+.valhint{font-size:11px;color:var(--mut2);margin-top:8px;line-height:1.4}
+
+/* ---- camera / OCR overlay ---- */
+.ocr{position:fixed;inset:0;z-index:100;background:#020c12;overflow:hidden;
+  display:flex;flex-direction:column}
+/* [hidden] must win over the display:flex panel rules below (same specificity as
+   .ocr-bar/.ocr-proc/.ocr-err), so phase switching in show() actually hides them */
+.ocr [hidden]{display:none!important}
+.ocr-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#020c12}
+.ocr-scrim{position:absolute;inset:0;background:
+  linear-gradient(180deg,rgba(2,12,18,.55),transparent 22% 62%,rgba(2,12,18,.75))}
+.ocr-reticle{position:absolute;left:10%;right:10%;top:39%;height:22%;border-radius:12px;
+  box-shadow:0 0 0 100vmax rgba(2,12,18,.5);pointer-events:none}
+.ocr-reticle .c{position:absolute;width:22px;height:22px;border:2.5px solid var(--aqua)}
+.ocr-reticle .tl{top:-2px;left:-2px;border-right:0;border-bottom:0;border-radius:9px 0 0 0}
+.ocr-reticle .tr{top:-2px;right:-2px;border-left:0;border-bottom:0;border-radius:0 9px 0 0}
+.ocr-reticle .bl{bottom:-2px;left:-2px;border-right:0;border-top:0;border-radius:0 0 0 9px}
+.ocr-reticle .br{bottom:-2px;right:-2px;border-left:0;border-top:0;border-radius:0 0 9px 0}
+.ocr-x{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;z-index:3;
+  width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:rgba(9,26,38,.7);
+  color:var(--txt);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(4px)}
+.ocr-top{position:absolute;top:calc(20px + env(safe-area-inset-top));left:20px;right:70px;z-index:2}
+.ocr-ttl{font-family:'Space Grotesk';font-weight:700;font-size:19px;letter-spacing:-.4px}
+.ocr-hint{font-size:13px;color:#b9d0d6;margin-top:5px;line-height:1.4;max-width:30ch}
+.ocr-bar{position:absolute;left:0;right:0;bottom:calc(30px + env(safe-area-inset-bottom));z-index:2;
+  display:flex;justify-content:center}
+.ocr-shutter{width:74px;height:74px;border-radius:99px;border:4px solid var(--aqua);background:transparent;
+  display:grid;place-items:center;cursor:pointer;transition:.12s}
+.ocr-shutter:active{transform:scale(.92)}
+.ocr-shutter i{width:56px;height:56px;border-radius:99px;
+  background:linear-gradient(150deg,var(--aqua),var(--aqua-d))}
+
+/* bottom sheets shared by processing / confirm / error */
+.ocr-proc,.ocr-confirm,.ocr-err{position:absolute;left:0;right:0;bottom:0;z-index:4;
+  background:var(--ink2);border-top:1px solid var(--line);border-radius:22px 22px 0 0;
+  padding:24px 20px calc(28px + env(safe-area-inset-bottom));text-align:center;
+  animation:up .28s cubic-bezier(.2,.8,.2,1)}
+.ocr-proc{display:flex;flex-direction:column;align-items:center;gap:14px}
+.ocr-spin{width:38px;height:38px;border-radius:99px;border:3px solid var(--line);
+  border-top-color:var(--aqua);animation:ocrspin .8s linear infinite}
+@keyframes ocrspin{to{transform:rotate(360deg)}}
+.ocr-procmsg{font-size:14px;color:var(--txt);font-weight:500}
+.ocr-prog{width:100%;max-width:260px;height:6px;border-radius:99px;background:var(--surf);overflow:hidden}
+.ocr-prog span{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--aqua),var(--blue));transition:width .2s}
+
+.ocr-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#04222a;
+  background:var(--aqua);border-radius:99px;padding:4px 11px;letter-spacing:.02em;margin-bottom:14px}
+.ocr-readout{display:flex;justify-content:center;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.ocr-dig{font-family:'Space Mono';font-weight:700;font-size:24px;min-width:22px;height:36px;padding:0 3px;
+  display:grid;place-items:center;border-radius:5px;background:#04141c;border:1px solid #16323f;color:#eafcff;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.ocr-dig.low{border-color:var(--coral);color:#ff8f9c}
+.ocr-conf{font-size:11px;color:var(--mut2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:16px}
+.ocr-conf.warn{color:var(--amber)}
+.ocr-confirm .flabel{margin-top:2px}
+.ocr-confirm .valrow{margin-bottom:6px}
+.ocr-confirm .valmain{font-size:20px;text-align:center}
+
+.ocr-err{display:flex;flex-direction:column;align-items:center}
+.ocr-erric{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;margin-bottom:14px;
+  background:rgba(255,107,125,.12);color:var(--coral)}
+.ocr-errmsg{font-size:14px;color:var(--txt);line-height:1.5;margin-bottom:20px;max-width:34ch}

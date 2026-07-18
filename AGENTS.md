@@ -14,6 +14,12 @@ Data is persisted in `localStorage`. Product and deploy details are in `README.m
 - **Plain HTML, CSS and JavaScript (vanilla)**. Do not introduce frameworks,
   libraries, bundlers, npm, or external dependencies — the "no build" simplicity is
   intentional.
+- **One deliberate exception:** the camera-OCR feature vendors **Tesseract.js**
+  under `src/vendor/tesseract/` (pinned v5.1.1, committed as static files — no npm,
+  no build). It is served same-origin and **lazy-loaded only when the camera is
+  first opened**, so it makes no external runtime requests and adds no page-load
+  weight. Do not add other dependencies; if you touch the vendored files, keep them
+  pinned and self-contained (the core `*.wasm.js` embed their WASM as a single file).
 - All published source lives in `src/`. There is no build: what is in `src/` is
   exactly what ships to production.
 
@@ -31,12 +37,14 @@ Data is persisted in `localStorage`. Product and deploy details are in `README.m
 
 ```
 src/
-├── index.html              # Page shell (#app, #modal, #install); loads i18n.js then app.js
+├── index.html              # Page shell (#app, #modal, #camera, #install); loads i18n → ocr → app
 ├── css/styles.css          # All styles (theme variables under :root)
 ├── js/i18n.js              # Translation dictionary (MESSAGES) + t() helper
+├── js/ocr.js               # Camera + on-device OCR (Ocr.open); lazy-loads vendored Tesseract
 ├── js/app.js               # All app logic
 ├── manifest.webmanifest    # PWA manifest
-├── sw.js                   # Service Worker (cache-first, offline)
+├── sw.js                   # Service Worker (cache-first precache + runtime cache, offline)
+├── vendor/tesseract/       # Vendored Tesseract.js v5.1.1 (lazy-loaded, runtime-cached)
 └── assets/icons/           # App/PWA icons
 ```
 
@@ -61,10 +69,12 @@ src/
 
 ## Other rules
 
-- **When you change `app.js`, `i18n.js`, `styles.css`, `index.html`, or any cached
-  asset, bump the cache version in `src/sw.js`** (`const CACHE = "controle-agua-vN"`)
-  and make sure every cached file is listed in `ASSETS`. Otherwise installed users
-  keep the old version.
+- **When you change any cached asset (`app.js`, `ocr.js`, `i18n.js`, `styles.css`,
+  `index.html`, …), bump `APP_VERSION` in `src/js/version.js`** — that changes the
+  Service Worker cache name (see Versioning) so installed users get the new version.
+  Do not edit the `CACHE` string in `sw.js` by hand; it derives from `APP_VERSION`.
+  Make sure every precached file is listed in `ASSETS` in `src/sw.js` (the vendored
+  Tesseract engine is intentionally runtime-cached, not precached).
 - `start_url` and `scope` in `manifest.webmanifest` must stay `"."` (root), not
   `./index.html`.
 - Keep the app working **offline**, with no external requests at runtime.
@@ -97,6 +107,13 @@ new cycle).
   place to edit on a bump. `src/sw.js` derives its cache name from it
   (`CACHE = "controle-agua-v" + APP_VERSION`) and the footer renders it via the i18n
   key `footer.version` — do **not** hardcode the version in `sw.js` or the footer.
+- **Always verify the version before committing.** `APP_VERSION` must be a single,
+  honest increment over the **last released git tag** (`git describe --tags --abbrev=0`;
+  the repo starts from `v0.1.0`), matching the change type (PATCH/MINOR/MAJOR) — never
+  a running total of intermediate bumps. If you bumped it repeatedly while iterating or
+  debugging (e.g. to bust the Service Worker cache on a test device), **collapse it back
+  to that one correct value before committing**. Quick check:
+  `grep APP_VERSION src/js/version.js` vs. `git tag`.
 - Each release gets a matching git tag `vX.Y.Z` and a GitHub release (repo
   `geraldoantonio/aquametro`) with **pt-BR** notes, matching the `README.md` convention.
 - The full flow is automated by the **`release` skill** (`.agents/skills/release/`);

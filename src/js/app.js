@@ -91,6 +91,7 @@ function icon(name, size = 16, fill = false) {
     waves: '<path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/>',
     download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
     home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    camera: '<path d="M3 8a2 2 0 0 1 2-2h2l1.4-2h5.2L20 6h-1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.2"/>',
   };
   const f = fill ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="2"';
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" ' + f +
@@ -217,24 +218,45 @@ function historyChartSVG(history) {
 }
 
 /* ================= reading form (shared) ================= */
+// Split a stored float into the meter's black (integer m³) and red (fractional
+// digits, up to 3) parts, so the two-field form can round-trip the same value.
+function splitValue(v) {
+  if (v === "" || v == null || isNaN(v)) return { int: "", dec: "" };
+  const n = Number(v), int = Math.floor(n);
+  const dec = (n - int).toFixed(3).slice(2).replace(/0+$/, ""); // "0.567"→"567", "0.05"→"05"
+  return { int: String(int), dec };
+}
+
 function readingForm(prefix, defaultValue, submitAction, submitLabel) {
+  const sv = splitValue(defaultValue);
+  const cam = Ocr.supported
+    ? '<button type="button" class="cambtn" data-action="ocr-open" data-prefix="' + prefix + '" aria-label="' + esc(t("ocr.button")) + '">' + icon("camera", 20) + "</button>"
+    : "";
   return (
-    '<div class="two">' +
-      '<div class="field"><label class="flabel">' + t("form.dateLabel") + '</label>' +
-        '<input class="input" type="date" id="' + prefix + '-date" max="' + todayStr() + '" value="' + todayStr() + '"></div>' +
-      '<div class="field"><label class="flabel">' + t("form.valueLabel") + '</label>' +
-        '<input class="input" inputmode="decimal" id="' + prefix + '-value" placeholder="' + t("form.valuePlaceholder") + '" value="' + (defaultValue || "") + '"></div>' +
-    "</div>" +
+    '<div class="field"><label class="flabel">' + t("form.dateLabel") + '</label>' +
+      '<input class="input" type="date" id="' + prefix + '-date" max="' + todayStr() + '" value="' + todayStr() + '"></div>' +
+    '<div class="field"><label class="flabel">' + t("form.valueLabel") + '</label>' +
+      '<div class="valrow">' +
+        '<div class="inputwrap valmain">' +
+          // inputmode="numeric" gives phones a plain number pad (no comma/dot) for the m³ part;
+          // maxlength 5 matches the 5-wheel odometer the meter display renders (residential range)
+          '<input class="input" inputmode="numeric" maxlength="5" id="' + prefix + '-int" placeholder="' + t("form.intPlaceholder") + '" value="' + sv.int + '">' + cam +
+        "</div>" +
+        '<span class="valsep">,</span>' +
+        '<input class="input valdec" inputmode="numeric" maxlength="3" id="' + prefix + '-dec" placeholder="' + t("form.decPlaceholder") + '" value="' + sv.dec + '">' +
+      "</div>" +
+      '<div class="valhint">' + t("form.decHint") + "</div></div>" +
     '<div class="warn" id="' + prefix + '-warn" style="display:none"></div>' +
     '<button class="btn pri" data-action="' + submitAction + '">' + icon("check") + " " + submitLabel + "</button>"
   );
 }
 function readReading(prefix, minValue) {
   const date = document.getElementById(prefix + "-date").value;
-  const raw = document.getElementById(prefix + "-value").value;
-  const num = parseFloat(String(raw).replace(",", "."));
+  const intRaw = (document.getElementById(prefix + "-int").value || "").replace(/\D/g, "");
+  const decRaw = (document.getElementById(prefix + "-dec").value || "").replace(/\D/g, "").slice(0, 3);
   const warn = document.getElementById(prefix + "-warn");
-  if (!date || isNaN(num)) { warn.innerHTML = icon("alert", 14) + " " + t("form.errRequired"); warn.style.display = "flex"; return null; }
+  if (!date || intRaw === "") { warn.innerHTML = icon("alert", 14) + " " + t("form.errRequired"); warn.style.display = "flex"; return null; }
+  const num = parseInt(intRaw, 10) + (decRaw ? Number("0." + decRaw) : 0);
   if (minValue != null && num < minValue) { warn.innerHTML = icon("alert", 14) + " " + t("form.errIncreasing", { min: fmt(minValue, 3) }); warn.style.display = "flex"; return null; }
   return { date, value: num };
 }
@@ -506,6 +528,15 @@ document.addEventListener("click", (e) => {
   } else if (a === "nc-submit") {
     const r = readReading("nc", null); if (!r) return;
     startCycle(r.date, r.value); ui.modal = null; ui.addOpen = false; render();
+  } else if (a === "ocr-open") {
+    const prefix = target.dataset.prefix;
+    // OCR pre-fills the meter fields; the user still reviews and submits the form.
+    Ocr.open((intStr, decStr) => {
+      const bi = document.getElementById(prefix + "-int");
+      const bd = document.getElementById(prefix + "-dec");
+      if (bi) { bi.value = intStr; bi.focus(); }
+      if (bd && decStr) bd.value = decStr;
+    });
   } else if (a === "install") {
     if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.finally(() => { deferredPrompt = null; renderInstall(); }); }
   }
