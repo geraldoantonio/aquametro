@@ -90,6 +90,8 @@ const MESSAGES = {
     "install.prompt": "Instale o app na tela inicial",
     "install.button": "Instalar",
     "install.ios": "Para instalar: toque em Compartilhar → Adicionar à Tela de Início.",
+
+    "footer.version": "v{version}",
   },
 };
 

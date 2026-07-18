@@ -521,3 +521,6 @@ if ("serviceWorker" in navigator) {
 
 loadState();
 render();
+
+// Version label is static; set it once (APP_VERSION comes from version.js).
+document.getElementById("version").textContent = t("footer.version", { version: APP_VERSION });

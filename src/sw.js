@@ -1,9 +1,11 @@
-const CACHE = "controle-agua-v7";
+importScripts("js/version.js");
+const CACHE = "controle-agua-v" + APP_VERSION;
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/styles.css",
+  "./js/version.js",
   "./js/i18n.js",
   "./js/app.js",
   "./assets/icons/icon-192.png",
