@@ -3,6 +3,7 @@ const KEY = "controle-agua-v2";
 let state = { meters: [], activeMeterId: null };
 let ui = { addOpen: false, modal: null, obStep: 1, confirmDel: false };
 let deferredPrompt = null;
+let waitingWorker = null; // a Service Worker that installed a new version and is waiting to activate
 
 function newMeter(name) {
   return { id: uid(), name: name, config: { target: 11, cycleDays: 30 }, readings: [], history: [] };
@@ -383,6 +384,7 @@ function render() {
   app.innerHTML = head + metersBar() + body;
   renderModal();
   renderInstall();
+  renderUpdate();
 }
 
 function renderModal() {
@@ -447,6 +449,16 @@ function renderInstall() {
   } else {
     el.style.display = "none";
   }
+}
+
+// Banner shown when the Service Worker has a new version installed and waiting.
+function renderUpdate() {
+  const el = document.getElementById("update");
+  if (!waitingWorker) { el.style.display = "none"; return; }
+  el.style.display = "flex";
+  el.className = "update";
+  el.innerHTML = icon("rotate", 18) + "<span>" + t("update.prompt") +
+    "</span><button data-action='apply-update'>" + t("update.button") + "</button>";
 }
 
 /* ================= actions ================= */
@@ -539,6 +551,13 @@ document.addEventListener("click", (e) => {
     });
   } else if (a === "install") {
     if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.finally(() => { deferredPrompt = null; renderInstall(); }); }
+  } else if (a === "apply-update") {
+    // Tell the waiting worker to activate; "controllerchange" then reloads the page.
+    if (waitingWorker) { waitingWorker.postMessage({ type: "SKIP_WAITING" }); waitingWorker = null; renderUpdate(); }
+  } else if (a === "open-external") {
+    // Open in the OS browser instead of navigating inside the installed PWA window.
+    e.preventDefault();
+    window.open(target.href, "_blank", "noopener,noreferrer");
   }
 });
 
@@ -546,8 +565,36 @@ window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); defe
 window.addEventListener("appinstalled", () => { deferredPrompt = null; renderInstall(); });
 
 /* ================= service worker ================= */
+// Surface a waiting worker (the new version) so renderUpdate() can offer to apply it.
+function trackWaiting(worker) {
+  if (!worker) return;
+  waitingWorker = worker;
+  renderUpdate();
+}
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      // A new version may already be installed and waiting (updated while app was closed).
+      // controller check skips the very first install, where there is no previous version.
+      if (reg.waiting && navigator.serviceWorker.controller) trackWaiting(reg.waiting);
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) trackWaiting(nw);
+        });
+      });
+    }).catch(() => {});
+
+    // When the applied worker takes control, reload once to run the new version.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
+  });
 }
 
 loadState();

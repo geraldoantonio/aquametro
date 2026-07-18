@@ -47,6 +47,11 @@ body{
 .install button{margin-left:auto;background:var(--aqua);color:#04222a;border:none;border-radius:9px;
   padding:8px 14px;font-weight:700;font-family:'Inter';font-size:13px;cursor:pointer;flex:none}
 
+.update{display:flex;align-items:center;gap:10px;background:linear-gradient(150deg,rgba(87,176,230,.18),rgba(55,224,200,.08));
+  border:1px solid var(--aqua-d);border-radius:14px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--txt)}
+.update button{margin-left:auto;background:var(--aqua);color:#04222a;border:none;border-radius:9px;
+  padding:8px 14px;font-weight:700;font-family:'Inter';font-size:13px;cursor:pointer;flex:none}
+
 .card{background:linear-gradient(180deg,var(--surf),var(--surf2));border:1px solid var(--line);
   border-radius:20px;padding:20px;margin-bottom:14px}
 .status{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;

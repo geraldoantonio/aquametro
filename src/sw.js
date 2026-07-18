@@ -15,9 +15,16 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  // Do NOT skipWaiting here: a freshly installed worker stays in "waiting" so the
+  // page can show an "update available" prompt and let the user apply it. The page
+  // triggers activation on demand by posting SKIP_WAITING (see the message handler).
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+});
+
+// The page posts this when the user taps "update" — activate the waiting worker,
+// which fires "controllerchange" in the page so it can reload onto the new version.
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {

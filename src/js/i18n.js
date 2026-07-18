@@ -113,6 +113,9 @@ const MESSAGES = {
     "install.button": "Instalar",
     "install.ios": "Para instalar: toque em Compartilhar → Adicionar à Tela de Início.",
 
+    "update.prompt": "Nova versão disponível",
+    "update.button": "Atualizar",
+
     "footer.version": "v{version}",
   },
 };
