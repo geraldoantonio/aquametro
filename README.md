@@ -1,4 +1,4 @@
-# 💧 Controle de Água
+# 💧 Aquametro — Controle de Consumo de Água
 
 App web (PWA) para acompanhar o consumo de água da sua casa ao longo do ciclo de faturamento da concessionária e não estourar a meta. Você registra as leituras do hidrômetro e o app calcula consumo, média diária, projeção do ciclo e quanto ainda pode gastar por dia.
 
@@ -16,14 +16,22 @@ Tudo roda **100% no navegador** — sem back-end, sem cadastro. Os dados ficam s
 
 ## Como usar
 
-Por ser um site estático, basta servir os arquivos por HTTP. Localmente:
+Por ser um site estático, basta servir a pasta `src/` por HTTP. A forma mais simples é usar o Makefile:
 
 ```bash
-# na raiz do projeto
-python3 -m http.server 8000
+make dev
 # depois abra http://localhost:8000
 ```
 
+Ou diretamente, sem o Makefile:
+
+```bash
+python3 -m http.server 8000 --directory src
+# depois abra http://localhost:8000
+```
+
+> A porta pode ser trocada: `make dev PORT=3000`.
+>
 > É recomendado servir via HTTP (não abrir o `index.html` direto com `file://`) para que o Service Worker e o modo PWA funcionem.
 
 No primeiro acesso, o onboarding pede:
@@ -34,18 +42,27 @@ Depois é só registrar novas leituras conforme for consultando o medidor.
 
 ## Deploy
 
-Qualquer hospedagem de arquivos estáticos serve (GitHub Pages, Netlify, Vercel, Cloudflare Pages etc.). Faça o upload da raiz do projeto — não há etapa de build.
+Qualquer hospedagem de arquivos estáticos serve (GitHub Pages, Netlify, Vercel, Cloudflare Pages etc.). Publique o conteúdo da pasta `src/` como raiz do site — não há etapa de build.
 
 ## Estrutura
 
 ```
 .
-├── index.html            # App completo (HTML + CSS + JS, sem dependências)
-├── manifest.webmanifest  # Manifesto do PWA
-├── sw.js                 # Service Worker (cache offline)
-├── icon-192.png          # Ícones do app
-├── icon-512.png
-└── apple-touch-icon.png
+├── Makefile                    # Atalhos (make dev)
+├── README.md
+└── src/                        # Fontes do app (raiz publicada)
+    ├── index.html              # Marcação da página
+    ├── css/
+    │   └── styles.css          # Estilos
+    ├── js/
+    │   └── app.js              # Lógica do app
+    ├── manifest.webmanifest    # Manifesto do PWA
+    ├── sw.js                   # Service Worker (cache offline)
+    └── assets/
+        └── icons/              # Ícones do app / PWA
+            ├── icon-192.png
+            ├── icon-512.png
+            └── apple-touch-icon.png
 ```
 
 ## Tecnologia

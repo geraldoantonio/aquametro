@@ -1,142 +1,3 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#071a26" />
-<title>Controle de Água</title>
-<link rel="manifest" href="manifest.webmanifest" />
-<link rel="apple-touch-icon" href="apple-touch-icon.png" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Controle de Água" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
-
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{
-  --ink:#071a26; --ink2:#0c2635; --surf:#113247; --surf2:#0e2a3c;
-  --line:#1d4257; --aqua:#37e0c8; --aqua-d:#1fb6a2; --blue:#57b0e6;
-  --amber:#f6b45a; --coral:#ff6b7d; --txt:#e9f6f7; --mut:#7fa0b0; --mut2:#5a7d8d;
-}
-html,body{background:var(--ink)}
-body{
-  font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--txt);
-  min-height:100vh;
-  background:
-    radial-gradient(1200px 500px at 80% -10%, rgba(55,224,200,.10), transparent 60%),
-    radial-gradient(900px 500px at -10% 20%, rgba(87,176,230,.08), transparent 55%),
-    var(--ink);
-  padding:calc(20px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom));
-}
-.wrap{max-width:560px;margin:0 auto}
-
-.head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.logo{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;
-  background:linear-gradient(150deg,var(--aqua),var(--aqua-d));color:#04222a;flex:none;
-  box-shadow:0 8px 24px -8px rgba(55,224,200,.6)}
-.title{font-family:'Space Grotesk';font-weight:700;font-size:19px;letter-spacing:-.4px;line-height:1.05}
-.sub{font-size:11.5px;color:var(--mut);letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
-.icbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
-  background:var(--surf2);color:var(--mut);display:grid;place-items:center;cursor:pointer;transition:.15s;flex:none}
-.icbtn:active{transform:scale(.94)}
-.icbtn.first{margin-left:auto}
-
-.install{display:flex;align-items:center;gap:10px;background:linear-gradient(150deg,rgba(55,224,200,.16),rgba(87,176,230,.08));
-  border:1px solid var(--aqua-d);border-radius:14px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--txt)}
-.install button{margin-left:auto;background:var(--aqua);color:#04222a;border:none;border-radius:9px;
-  padding:8px 14px;font-weight:700;font-family:'Inter';font-size:13px;cursor:pointer;flex:none}
-
-.card{background:linear-gradient(180deg,var(--surf),var(--surf2));border:1px solid var(--line);
-  border-radius:20px;padding:20px;margin-bottom:14px}
-.status{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
-  padding:6px 12px;border-radius:99px;letter-spacing:.02em}
-
-.meter{display:flex;align-items:baseline;gap:5px;justify-content:center;margin:2px 0 4px;flex-wrap:wrap}
-.dig{font-family:'Space Mono';font-weight:700;font-size:26px;line-height:1;
-  width:24px;height:36px;display:grid;place-items:center;border-radius:5px;
-  background:#04141c;border:1px solid #16323f;color:#eafcff;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
-.dig.red{background:#2a0c10;border-color:#4a1820;color:#ff8f9c}
-.unit{font-family:'Space Mono';font-size:13px;color:var(--mut);margin-left:6px}
-.meterlab{text-align:center;font-size:11px;color:var(--mut2);letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
-
-.tankrow{display:flex;gap:22px;align-items:center}
-.tankfacts{flex:1;min-width:0}
-.big{font-family:'Space Grotesk';font-weight:700;font-size:38px;letter-spacing:-1.5px;line-height:1}
-.bigunit{font-size:16px;color:var(--mut);font-weight:500;margin-left:3px}
-.ofideal{font-size:13px;color:var(--mut);margin-top:4px}
-.projrow{margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
-.projlab{font-size:11px;color:var(--mut2);letter-spacing:.1em;text-transform:uppercase}
-.projval{font-family:'Space Grotesk';font-weight:700;font-size:24px;margin-top:3px}
-
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.stat{background:var(--surf2);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
-.stat .l{font-size:10.5px;color:var(--mut2);letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:5px}
-.stat .v{font-family:'Space Grotesk';font-weight:600;font-size:20px;margin-top:6px;letter-spacing:-.3px}
-.stat .v small{font-size:12px;color:var(--mut);font-weight:500}
-
-.secttl{font-size:12px;color:var(--mut);letter-spacing:.12em;text-transform:uppercase;
-  margin:0 2px 14px;display:flex;align-items:center;gap:8px}
-
-.read{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
-.read:last-child{border-bottom:none}
-.rdate{font-family:'Space Mono';font-size:13px;color:var(--txt);width:52px;flex:none}
-.rmed{font-family:'Space Mono';font-size:14px;color:var(--txt)}
-.rdelta{margin-left:auto;font-size:13px;font-weight:600;color:var(--aqua);text-align:right}
-.rdelta small{color:var(--mut2);font-weight:400;font-size:11px;display:block}
-.anchor{font-size:10px;color:#04222a;background:var(--aqua);padding:2px 7px;border-radius:99px;font-weight:700;letter-spacing:.04em;margin-left:auto}
-.del{background:none;border:none;color:var(--mut2);cursor:pointer;padding:4px;display:grid;place-items:center}
-.del:active{color:var(--coral)}
-
-.field{margin-bottom:14px}
-.flabel{font-size:12px;color:var(--mut);margin-bottom:7px;display:block;font-weight:500}
-.input{width:100%;background:#04141c;border:1px solid var(--line);border-radius:12px;
-  padding:13px 14px;color:var(--txt);font-size:16px;font-family:'Space Mono';outline:none;transition:.15s}
-.input:focus{border-color:var(--aqua-d);box-shadow:0 0 0 3px rgba(55,224,200,.12)}
-.btn{width:100%;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;
-  font-family:'Inter';display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s;margin-bottom:14px}
-.btn:active{transform:scale(.99)}
-.btn.pri{background:linear-gradient(150deg,var(--aqua),var(--aqua-d));color:#04222a}
-.btn.ghost{background:var(--surf2);color:var(--txt);border:1px solid var(--line)}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.warn{font-size:12.5px;color:var(--amber);margin-top:-4px;margin-bottom:12px;display:flex;gap:6px;align-items:center}
-.hint{font-size:11.5px;color:var(--mut2);margin-top:8px;line-height:1.5}
-.hint strong{color:var(--mut)}
-
-.ov{position:fixed;inset:0;background:rgba(3,14,20,.72);backdrop-filter:blur(6px);
-  display:flex;align-items:flex-end;justify-content:center;z-index:50}
-.sheet{background:var(--ink2);border:1px solid var(--line);border-bottom:none;border-radius:22px 22px 0 0;
-  padding:22px 20px calc(30px + env(safe-area-inset-bottom));width:100%;max-width:560px;max-height:92vh;
-  overflow-y:auto;animation:up .28s cubic-bezier(.2,.8,.2,1)}
-@keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.sheethd{display:flex;align-items:center;margin-bottom:20px}
-.sheethd h3{font-family:'Space Grotesk';font-size:18px;font-weight:600}
-.close{margin-left:auto;background:var(--surf2);border:1px solid var(--line);color:var(--mut);
-  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;cursor:pointer}
-
-.empty{text-align:center;padding:20px 10px 6px}
-.empty .ic{width:64px;height:64px;border-radius:20px;margin:0 auto 16px;display:grid;place-items:center;
-  background:linear-gradient(150deg,rgba(55,224,200,.18),rgba(87,176,230,.1));color:var(--aqua)}
-.empty h2{font-family:'Space Grotesk';font-size:20px;margin-bottom:8px}
-.empty p{color:var(--mut);font-size:14px;line-height:1.5;margin-bottom:20px}
-
-.histrow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
-.histrow:last-child{border:none}
-
-@keyframes wavemove{from{transform:translateX(0)}to{transform:translateX(-100px)}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div id="install" style="display:none"></div>
-  <div id="app"></div>
-</div>
-<div id="modal"></div>
-
-<script>
 /* ================= state ================= */
 const KEY = "controle-agua-v2";
 let state = { config: { ideal: 11, ciclo: 30 }, readings: [], history: [] };
@@ -392,7 +253,7 @@ function render() {
   const s = computeStats();
 
   let head = '<div class="head"><div class="logo">' + icon("droplet", 24, true) + "</div>" +
-    '<div><div class="title">Controle de Água</div><div class="sub">ciclo de ' + cfg.ciclo + ' dias</div></div>' +
+    '<div><div class="title">Aquametro</div><div class="sub">ciclo de ' + cfg.ciclo + ' dias</div></div>' +
     '<button class="icbtn first" data-action="open-modal" data-modal="history">' + icon("history", 18) + "</button>" +
     '<button class="icbtn" data-action="open-modal" data-modal="settings">' + icon("settings", 18) + "</button></div>";
 
@@ -524,6 +385,3 @@ if ("serviceWorker" in navigator) {
 }
 
 render();
-</script>
-</body>
-</html>
