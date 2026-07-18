@@ -29,6 +29,19 @@ body{
 .icbtn:active{transform:scale(.94)}
 .icbtn.first{margin-left:auto}
 
+.meters{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;
+  -ms-overflow-style:none;scrollbar-width:none}
+.meters::-webkit-scrollbar{display:none}
+.mchip{flex:none;border:1px solid var(--line);background:var(--surf2);color:var(--mut);
+  padding:9px 13px;border-radius:99px;font-size:13px;font-weight:600;font-family:'Inter';cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:.15s;white-space:nowrap;max-width:190px}
+.mchip svg{flex:none}
+.mchip span,.mchip{overflow:hidden;text-overflow:ellipsis}
+.mchip:active{transform:scale(.96)}
+.mchip.act{background:linear-gradient(150deg,rgba(55,224,200,.2),rgba(87,176,230,.1));
+  border-color:var(--aqua-d);color:var(--txt)}
+.mchip.add{color:var(--aqua);border-style:dashed}
+
 .install{display:flex;align-items:center;gap:10px;background:linear-gradient(150deg,rgba(55,224,200,.16),rgba(87,176,230,.08));
   border:1px solid var(--aqua-d);border-radius:14px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--txt)}
 .install button{margin-left:auto;background:var(--aqua);color:#04222a;border:none;border-radius:9px;
@@ -85,6 +98,7 @@ body{
 .btn:active{transform:scale(.99)}
 .btn.pri{background:linear-gradient(150deg,var(--aqua),var(--aqua-d));color:#04222a}
 .btn.ghost{background:var(--surf2);color:var(--txt);border:1px solid var(--line)}
+.btn.danger{background:rgba(255,107,125,.12);color:var(--coral);border:1px solid rgba(255,107,125,.4)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .warn{font-size:12.5px;color:var(--amber);margin-top:-4px;margin-bottom:12px;display:flex;gap:6px;align-items:center}

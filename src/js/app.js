@@ -1,18 +1,43 @@
 /* ================= state ================= */
 const KEY = "controle-agua-v2";
-let state = { config: { ideal: 11, ciclo: 30 }, readings: [], history: [] };
-let ui = { addOpen: false, modal: null, obStep: 1 };
+let state = { meters: [], activeMeterId: null };
+let ui = { addOpen: false, modal: null, obStep: 1, confirmDel: false };
 let deferredPrompt = null;
 
-try {
-  const raw = localStorage.getItem(KEY);
-  if (raw) {
-    const d = JSON.parse(raw);
-    state.config = d.config || state.config;
-    state.readings = d.readings || [];
-    state.history = d.history || [];
+function newMeter(name) {
+  return { id: uid(), name: name, config: { ideal: 11, ciclo: 30 }, readings: [], history: [] };
+}
+function active() {
+  return state.meters.find((m) => m.id === state.activeMeterId) || state.meters[0];
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (Array.isArray(d.meters) && d.meters.length) {
+        state.meters = d.meters;
+        state.activeMeterId = d.activeMeterId || d.meters[0].id;
+      } else if (d.readings || d.config || d.history) {
+        // migra o formato antigo de medidor único
+        const m = {
+          id: uid(), name: "Medidor 1",
+          config: d.config || { ideal: 11, ciclo: 30 },
+          readings: d.readings || [], history: d.history || [],
+        };
+        state.meters = [m];
+        state.activeMeterId = m.id;
+      }
+    }
+  } catch (e) {}
+  if (!state.meters.length) {
+    const m = newMeter("Medidor 1");
+    state.meters = [m];
+    state.activeMeterId = m.id;
   }
-} catch (e) {}
+  if (!active()) state.activeMeterId = state.meters[0].id;
+}
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -45,6 +70,7 @@ function icon(name, size = 16, fill = false) {
     history: '<path d="M3 4v6h6"/><path d="M3.5 11a9 9 0 1 0 2-5.5L3 10"/><path d="M12 8v5l3 2"/>',
     waves: '<path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/>',
     download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+    home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
   };
   const f = fill ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="2"';
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" ' + f +
@@ -53,9 +79,9 @@ function icon(name, size = 16, fill = false) {
 
 /* ================= stats ================= */
 function computeStats() {
-  const sorted = [...state.readings].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const sorted = [...active().readings].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   if (sorted.length === 0) return { sorted };
-  const cfg = state.config;
+  const cfg = active().config;
   const anchor = sorted[0], latest = sorted[sorted.length - 1];
   const consumo = Math.max(0, latest.medidor - anchor.medidor);
   const dias = daysBetween(anchor.date, latest.date);
@@ -164,7 +190,7 @@ function readReading(prefix, minMed) {
 
 /* ================= dashboard pieces ================= */
 function heroCard(s) {
-  const cfg = state.config, color = COLORS[s.level];
+  const cfg = active().config, color = COLORS[s.level];
   return '<div class="card">' +
     '<div style="display:flex;justify-content:center;margin-bottom:14px">' +
       '<span class="status" style="background:' + color + '22;color:' + color + '">' +
@@ -185,7 +211,7 @@ function statCard(ic, l, v) {
   return '<div class="stat"><div class="l">' + icon(ic, 12) + l + '</div><div class="v">' + v + "</div></div>";
 }
 function statsGrid(s) {
-  const cfg = state.config;
+  const cfg = active().config;
   const col = (c, txt) => '<span style="color:' + c + '">' + txt + "</span>";
   return '<div class="grid">' +
     statCard("calendar", "Dias no ciclo", s.dias + "<small> / " + cfg.ciclo + "</small>") +
@@ -198,7 +224,7 @@ function statsGrid(s) {
 }
 
 function chartCard(s) {
-  const cfg = state.config, color = COLORS[s.level];
+  const cfg = active().config, color = COLORS[s.level];
   const data = s.sorted.map((r) => ({ dia: daysBetween(s.sorted[0].date, r.date), consumo: Math.max(0, r.medidor - s.sorted[0].medidor) }));
   if (data.length < 2) return "";
   return '<div class="card"><div class="secttl">' + icon("waves", 14) + " Trajetória do consumo</div>" +
@@ -230,15 +256,30 @@ function readingsCard(s) {
   return '<div class="card"><div class="secttl">' + icon("droplet", 14) + " Leituras registradas</div>" + rows + "</div>";
 }
 
+/* ================= meters bar ================= */
+function metersBar() {
+  if (state.meters.length <= 1 && active().readings.length === 0) return "";
+  const chips = state.meters.map((m) => {
+    const act = m.id === state.activeMeterId;
+    return '<button class="mchip' + (act ? " act" : "") + '" data-action="switch-meter" data-id="' + m.id + '">' +
+      icon("home", 13) + esc(m.name) + "</button>";
+  }).join("");
+  const add = '<button class="mchip add" data-action="add-meter">' + icon("plus", 14) + " Novo</button>";
+  return '<div class="meters">' + chips + add + "</div>";
+}
+
 /* ================= onboarding ================= */
 function onboarding() {
+  const m = active();
   if (ui.obStep === 1) {
     return '<div class="card"><div class="empty"><div class="ic">' + icon("droplet", 30, true) + "</div>" +
-      "<h2>Vamos começar</h2><p>Defina sua meta de consumo e a duração do ciclo de faturamento.</p></div>" +
+      "<h2>Vamos começar</h2><p>Dê um nome ao medidor, defina a meta de consumo e a duração do ciclo de faturamento.</p></div>" +
+      '<div class="field"><label class="flabel">Nome do medidor</label>' +
+        '<input class="input" id="ob-name" style="font-family:Inter" value="' + esc(m.name) + '" placeholder="ex: Casa, Chácara"></div>' +
       '<div class="two"><div class="field"><label class="flabel">Consumo ideal (m³)</label>' +
-        '<input class="input" inputmode="decimal" id="ob-ideal" value="' + state.config.ideal + '" placeholder="11"></div>' +
+        '<input class="input" inputmode="decimal" id="ob-ideal" value="' + m.config.ideal + '" placeholder="11"></div>' +
       '<div class="field"><label class="flabel">Ciclo (dias)</label>' +
-        '<input class="input" inputmode="numeric" id="ob-ciclo" value="' + state.config.ciclo + '" placeholder="30"></div></div>' +
+        '<input class="input" inputmode="numeric" id="ob-ciclo" value="' + m.config.ciclo + '" placeholder="30"></div></div>' +
       '<button class="btn pri" data-action="ob-next">Continuar</button></div>';
   }
   return '<div class="card"><div class="empty"><div class="ic">' + icon("droplet", 30, true) + "</div>" +
@@ -249,11 +290,14 @@ function onboarding() {
 /* ================= render ================= */
 function render() {
   const app = document.getElementById("app");
-  const cfg = state.config;
+  const m = active();
+  const cfg = m.config;
+  const multi = state.meters.length > 1;
   const s = computeStats();
 
   let head = '<div class="head"><div class="logo">' + icon("droplet", 24, true) + "</div>" +
-    '<div><div class="title">Aquametro</div><div class="sub">ciclo de ' + cfg.ciclo + ' dias</div></div>' +
+    '<div style="min-width:0"><div class="title">Aquametro</div><div class="sub">' +
+      (multi ? esc(m.name) : "ciclo de " + cfg.ciclo + " dias") + '</div></div>' +
     '<button class="icbtn first" data-action="open-modal" data-modal="history">' + icon("history", 18) + "</button>" +
     '<button class="icbtn" data-action="open-modal" data-modal="settings">' + icon("settings", 18) + "</button></div>";
 
@@ -264,7 +308,7 @@ function render() {
     body = heroCard(s) + statsGrid(s) + chartCard(s) + addSection(s) + readingsCard(s) +
       '<button class="btn ghost" data-action="open-modal" data-modal="newcycle">' + icon("rotate", 17) + " Nova leitura oficial (novo ciclo)</button>";
   }
-  app.innerHTML = head + body;
+  app.innerHTML = head + metersBar() + body;
   renderModal();
   renderInstall();
 }
@@ -273,16 +317,27 @@ function renderModal() {
   const m = document.getElementById("modal");
   if (!ui.modal) { m.innerHTML = ""; return; }
   const s = computeStats();
+  const cur = active();
   let title = "", inner = "";
   if (ui.modal === "settings") {
-    title = "Ajustes";
+    title = "Ajustes do medidor";
+    const delBlock = state.meters.length > 1
+      ? (ui.confirmDel
+          ? '<div class="warn" style="margin-top:6px">' + icon("alert", 14) + ' Remover "' + esc(cur.name) + '" e todas as suas leituras? Não dá pra desfazer.</div>' +
+            '<div class="two"><button class="btn ghost" style="margin:0" data-action="meter-del-cancel">Cancelar</button>' +
+            '<button class="btn danger" style="margin:0" data-action="meter-del-confirm">' + icon("trash", 16) + " Remover</button></div>"
+          : '<button class="btn danger" style="margin-bottom:0" data-action="meter-del">' + icon("trash", 16) + " Remover este medidor</button>")
+      : "";
     inner =
+      '<div class="field"><label class="flabel">Nome do medidor</label>' +
+        '<input class="input" id="set-name" style="font-family:Inter" value="' + esc(cur.name) + '"></div>' +
       '<div class="field"><label class="flabel">Consumo ideal por ciclo (m³)</label>' +
-        '<input class="input" inputmode="decimal" id="set-ideal" value="' + state.config.ideal + '"></div>' +
+        '<input class="input" inputmode="decimal" id="set-ideal" value="' + cur.config.ideal + '"></div>' +
       '<div class="field"><label class="flabel">Duração do ciclo (dias)</label>' +
-        '<input class="input" inputmode="numeric" id="set-ciclo" value="' + state.config.ciclo + '"></div>' +
+        '<input class="input" inputmode="numeric" id="set-ciclo" value="' + cur.config.ciclo + '"></div>' +
       '<p class="hint" style="margin-bottom:16px">As concessionárias costumam faturar em ciclos de ~30 dias. Ajuste conforme sua conta. Isso não apaga suas leituras.</p>' +
-      '<button class="btn pri" data-action="set-save">' + icon("check", 17) + " Salvar ajustes</button>";
+      '<button class="btn pri" data-action="set-save">' + icon("check", 17) + " Salvar ajustes</button>" +
+      delBlock;
   } else if (ui.modal === "newcycle") {
     title = "Nova leitura oficial";
     inner =
@@ -290,10 +345,10 @@ function renderModal() {
       readingForm("nc", s.latest ? s.latest.medidor : "", "nc-submit", "Iniciar novo ciclo");
   } else if (ui.modal === "history") {
     title = "Histórico de ciclos";
-    if (state.history.length === 0) {
+    if (cur.history.length === 0) {
       inner = '<p class="hint">Nenhum ciclo fechado ainda. Ao registrar uma nova leitura oficial, o ciclo atual aparece aqui.</p>';
     } else {
-      inner = state.history.map((h) =>
+      inner = cur.history.map((h) =>
         '<div class="histrow"><span style="color:#7fa0b0;font-family:Space Mono">' + fmtDate(h.start) + " – " + fmtDate(h.end) + "</span>" +
         '<span style="font-family:Space Grotesk;font-weight:600;color:' + (h.consumo > h.ideal ? "#ff6b7d" : "#37e0c8") + '">' +
         fmt(h.consumo) + " / " + fmt(h.ideal) + " m³</span></div>").join("");
@@ -323,15 +378,23 @@ function renderInstall() {
 
 /* ================= actions ================= */
 function startCycle(date, medidor) {
+  const m = active();
   const s = computeStats();
   if (s.sorted && s.sorted.length >= 2) {
-    state.history.unshift({
+    m.history.unshift({
       id: uid(), start: s.sorted[0].date, end: s.sorted[s.sorted.length - 1].date,
-      consumo: s.consumo, ideal: state.config.ideal, dias: s.dias,
+      consumo: s.consumo, ideal: m.config.ideal, dias: s.dias,
     });
-    state.history = state.history.slice(0, 12);
+    m.history = m.history.slice(0, 12);
   }
-  state.readings = [{ id: uid(), date, medidor }];
+  m.readings = [{ id: uid(), date, medidor }];
+  save();
+}
+
+function deleteMeter(id) {
+  state.meters = state.meters.filter((m) => m.id !== id);
+  if (!state.meters.length) state.meters = [newMeter("Medidor 1")];
+  if (state.activeMeterId === id || !active()) state.activeMeterId = state.meters[0].id;
   save();
 }
 
@@ -343,31 +406,52 @@ document.addEventListener("click", (e) => {
   // Overlay carries close-modal; only close on a direct backdrop tap (not taps inside the sheet)
   if (a === "close-modal") {
     if (t.classList.contains("ov") && e.target !== t) return;
-    ui.modal = null; render(); return;
+    ui.modal = null; ui.confirmDel = false; render(); return;
   }
 
   if (a === "ob-next") {
+    const m = active();
+    const nm = document.getElementById("ob-name").value.trim();
     const i = parseFloat(String(document.getElementById("ob-ideal").value).replace(",", "."));
     const c = parseInt(document.getElementById("ob-ciclo").value, 10);
-    state.config = { ideal: !isNaN(i) && i > 0 ? i : 11, ciclo: !isNaN(c) && c > 0 ? c : 30 };
+    if (nm) m.name = nm;
+    m.config = { ideal: !isNaN(i) && i > 0 ? i : 11, ciclo: !isNaN(c) && c > 0 ? c : 30 };
     save(); ui.obStep = 2; render();
   } else if (a === "ob-start") {
     const r = readReading("ob", null); if (!r) return;
-    state.readings = [{ id: uid(), date: r.date, medidor: r.medidor }]; save(); render();
+    active().readings = [{ id: uid(), date: r.date, medidor: r.medidor }]; save(); render();
   } else if (a === "add-toggle") { ui.addOpen = true; render(); }
   else if (a === "add-cancel") { ui.addOpen = false; render(); }
   else if (a === "add-submit") {
     const s = computeStats();
     const r = readReading("add", s.latest.medidor); if (!r) return;
-    state.readings.push({ id: uid(), date: r.date, medidor: r.medidor }); save(); ui.addOpen = false; render();
+    active().readings.push({ id: uid(), date: r.date, medidor: r.medidor }); save(); ui.addOpen = false; render();
   } else if (a === "del") {
-    state.readings = state.readings.filter((x) => x.id !== t.dataset.id); save(); render();
-  } else if (a === "open-modal") { ui.modal = t.dataset.modal; render(); }
+    active().readings = active().readings.filter((x) => x.id !== t.dataset.id); save(); render();
+  } else if (a === "switch-meter") {
+    state.activeMeterId = t.dataset.id;
+    ui.addOpen = false; ui.modal = null; ui.obStep = 1; ui.confirmDel = false;
+    save(); render();
+  } else if (a === "add-meter") {
+    const m = newMeter("Medidor " + (state.meters.length + 1));
+    state.meters.push(m);
+    state.activeMeterId = m.id;
+    ui.addOpen = false; ui.modal = null; ui.obStep = 1; ui.confirmDel = false;
+    save(); render();
+  } else if (a === "meter-del") { ui.confirmDel = true; render(); }
+  else if (a === "meter-del-cancel") { ui.confirmDel = false; render(); }
+  else if (a === "meter-del-confirm") {
+    deleteMeter(state.activeMeterId);
+    ui.confirmDel = false; ui.modal = null; ui.addOpen = false; ui.obStep = 1; render();
+  } else if (a === "open-modal") { ui.modal = t.dataset.modal; ui.confirmDel = false; render(); }
   else if (a === "set-save") {
+    const m = active();
+    const nm = document.getElementById("set-name").value.trim();
     const i = parseFloat(String(document.getElementById("set-ideal").value).replace(",", "."));
     const c = parseInt(document.getElementById("set-ciclo").value, 10);
-    state.config = { ideal: !isNaN(i) && i > 0 ? i : state.config.ideal, ciclo: !isNaN(c) && c > 0 ? c : state.config.ciclo };
-    save(); ui.modal = null; render();
+    if (nm) m.name = nm;
+    m.config = { ideal: !isNaN(i) && i > 0 ? i : m.config.ideal, ciclo: !isNaN(c) && c > 0 ? c : m.config.ciclo };
+    save(); ui.modal = null; ui.confirmDel = false; render();
   } else if (a === "nc-submit") {
     const r = readReading("nc", null); if (!r) return;
     startCycle(r.date, r.medidor); ui.modal = null; ui.addOpen = false; render();
@@ -384,4 +468,5 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
 
+loadState();
 render();
