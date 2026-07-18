@@ -184,6 +184,38 @@ function chartSVG(data, target, cycleDays, color) {
   return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="display:block">' + grid + targetLine + line + dots + xlab + "</svg>";
 }
 
+// Grouped column chart comparing target vs. actual usage per closed cycle.
+// `history` is stored newest-first; the chart shows the 6 most recent, newest at the left.
+function historyChartSVG(history) {
+  const cycles = history.slice(0, 6);
+  const W = 320, H = 190, pl = 30, pr = 10, pt = 14, pb = 30;
+  const iw = W - pl - pr, ih = H - pt - pb;
+  const yMax = Math.max(0.01, ...cycles.map((h) => Math.max(h.usage, h.target))) * 1.15;
+  const yf = (v) => pt + ih - (v / yMax) * ih;
+  let grid = "";
+  for (let i = 0; i <= 4; i++) {
+    const gy = pt + ih * (i / 4), val = yMax * (1 - i / 4);
+    grid += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + gy + '" y2="' + gy + '" stroke="#1d4257" stroke-dasharray="3 3"/>';
+    grid += '<text x="' + (pl - 5) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="#7fa0b0" font-family="Space Mono">' + val.toFixed(0) + "</text>";
+  }
+  const gw = iw / cycles.length;
+  const barW = Math.min(16, gw * 0.34);
+  let bars = "";
+  cycles.forEach((h, i) => {
+    const cx = pl + gw * i + gw / 2;
+    const usageColor = h.usage > h.target ? COLORS.over : COLORS.ok;
+    const bar = (x, v, color) => '<rect x="' + x + '" y="' + yf(v) + '" width="' + barW +
+      '" height="' + (pt + ih - yf(v)) + '" rx="2" fill="' + color + '"/>';
+    bars += bar(cx - barW - 2, h.target, "#57b0e6") + bar(cx + 2, h.usage, usageColor);
+    bars += '<text x="' + cx + '" y="' + (H - 16) + '" text-anchor="middle" font-size="8.5" fill="#7fa0b0" font-family="Space Mono">' + fmtDate(h.end) + "</text>";
+  });
+  const dot = (color, label) => '<span style="display:inline-flex;align-items:center;gap:5px">' +
+    '<span style="width:9px;height:9px;border-radius:2px;background:' + color + '"></span>' + label + "</span>";
+  const legend = '<div style="display:flex;gap:16px;justify-content:center;font-size:11px;color:var(--mut2);margin-top:4px">' +
+    dot("#57b0e6", t("history.legendTarget")) + dot(COLORS.ok, t("history.legendUsage")) + "</div>";
+  return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="display:block">' + grid + bars + "</svg>" + legend;
+}
+
 /* ================= reading form (shared) ================= */
 function readingForm(prefix, defaultValue, submitAction, submitLabel) {
   return (
@@ -366,7 +398,8 @@ function renderModal() {
     if (cur.history.length === 0) {
       inner = '<p class="hint">' + t("history.empty") + "</p>";
     } else {
-      inner = cur.history.map((h) =>
+      inner = historyChartSVG(cur.history) +
+        cur.history.map((h) =>
         '<div class="histrow"><span style="color:#7fa0b0;font-family:Space Mono">' + fmtDate(h.start) + " – " + fmtDate(h.end) + "</span>" +
         '<span style="font-family:Space Grotesk;font-weight:600;color:' + (h.usage > h.target ? "#ff6b7d" : "#37e0c8") + '">' +
         fmt(h.usage) + " / " + fmt(h.target) + " m³</span></div>").join("");

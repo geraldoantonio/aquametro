@@ -84,6 +84,8 @@ const MESSAGES = {
 
     "history.title": "Histórico de ciclos",
     "history.empty": "Nenhum ciclo fechado ainda. Ao registrar uma nova leitura oficial, o ciclo atual aparece aqui.",
+    "history.legendTarget": "Objetivo",
+    "history.legendUsage": "Consumo real",
 
     "install.prompt": "Instale o app na tela inicial",
     "install.button": "Instalar",
