@@ -14,6 +14,12 @@ Data is persisted in `localStorage`. Product and deploy details are in `README.m
 - **Plain HTML, CSS and JavaScript (vanilla)**. Do not introduce frameworks,
   libraries, bundlers, npm, or external dependencies — the "no build" simplicity is
   intentional.
+- **One deliberate exception:** the camera-OCR feature vendors **Tesseract.js**
+  under `src/vendor/tesseract/` (pinned v5.1.1, committed as static files — no npm,
+  no build). It is served same-origin and **lazy-loaded only when the camera is
+  first opened**, so it makes no external runtime requests and adds no page-load
+  weight. Do not add other dependencies; if you touch the vendored files, keep them
+  pinned and self-contained (the core `*.wasm.js` embed their WASM as a single file).
 - All published source lives in `src/`. There is no build: what is in `src/` is
   exactly what ships to production.
 
@@ -31,12 +37,14 @@ Data is persisted in `localStorage`. Product and deploy details are in `README.m
 
 ```
 src/
-├── index.html              # Page shell (#app, #modal, #install); loads i18n.js then app.js
+├── index.html              # Page shell (#app, #modal, #camera, #install); loads i18n → ocr → app
 ├── css/styles.css          # All styles (theme variables under :root)
 ├── js/i18n.js              # Translation dictionary (MESSAGES) + t() helper
+├── js/ocr.js               # Camera + on-device OCR (Ocr.open); lazy-loads vendored Tesseract
 ├── js/app.js               # All app logic
 ├── manifest.webmanifest    # PWA manifest
-├── sw.js                   # Service Worker (cache-first, offline)
+├── sw.js                   # Service Worker (cache-first precache + runtime cache, offline)
+├── vendor/tesseract/       # Vendored Tesseract.js v5.1.1 (lazy-loaded, runtime-cached)
 └── assets/icons/           # App/PWA icons
 ```
 
