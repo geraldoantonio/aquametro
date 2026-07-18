@@ -5,10 +5,34 @@ let ui = { addOpen: false, modal: null, obStep: 1, confirmDel: false };
 let deferredPrompt = null;
 
 function newMeter(name) {
-  return { id: uid(), name: name, config: { ideal: 11, ciclo: 30 }, readings: [], history: [] };
+  return { id: uid(), name: name, config: { target: 11, cycleDays: 30 }, readings: [], history: [] };
 }
 function active() {
   return state.meters.find((m) => m.id === state.activeMeterId) || state.meters[0];
+}
+
+// Maps a meter from any persisted shape (including legacy Portuguese field names)
+// onto the current English schema, so older saved data keeps working.
+function normalizeMeter(m) {
+  const cfg = m.config || {};
+  const pick = (a, b, fallback) => (a != null ? a : b != null ? b : fallback);
+  return {
+    id: m.id || uid(),
+    name: m.name || t("meter.defaultName", { n: 1 }),
+    config: {
+      target: pick(cfg.target, cfg.ideal, 11),
+      cycleDays: pick(cfg.cycleDays, cfg.ciclo, 30),
+    },
+    readings: (m.readings || []).map((r) => ({
+      id: r.id || uid(), date: r.date, value: pick(r.value, r.medidor, 0),
+    })),
+    history: (m.history || []).map((h) => ({
+      id: h.id || uid(), start: h.start, end: h.end,
+      usage: pick(h.usage, h.consumo, 0),
+      target: pick(h.target, h.ideal, 0),
+      days: pick(h.days, h.dias, 0),
+    })),
+  };
 }
 
 function loadState() {
@@ -17,22 +41,18 @@ function loadState() {
     if (raw) {
       const d = JSON.parse(raw);
       if (Array.isArray(d.meters) && d.meters.length) {
-        state.meters = d.meters;
-        state.activeMeterId = d.activeMeterId || d.meters[0].id;
+        state.meters = d.meters.map(normalizeMeter);
+        state.activeMeterId = d.activeMeterId || state.meters[0].id;
       } else if (d.readings || d.config || d.history) {
-        // migra o formato antigo de medidor único
-        const m = {
-          id: uid(), name: "Medidor 1",
-          config: d.config || { ideal: 11, ciclo: 30 },
-          readings: d.readings || [], history: d.history || [],
-        };
+        // migrate the legacy single-meter shape into one meter
+        const m = normalizeMeter({ name: t("meter.defaultName", { n: 1 }), config: d.config, readings: d.readings, history: d.history });
         state.meters = [m];
         state.activeMeterId = m.id;
       }
     }
   } catch (e) {}
   if (!state.meters.length) {
-    const m = newMeter("Medidor 1");
+    const m = newMeter(t("meter.defaultName", { n: 1 }));
     state.meters = [m];
     state.activeMeterId = m.id;
   }
@@ -41,7 +61,7 @@ function loadState() {
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
-  catch (e) { console.error("Falha ao salvar", e); }
+  catch (e) { console.error("Failed to save", e); }
 }
 
 /* ================= helpers ================= */
@@ -49,7 +69,7 @@ const pad = (n) => String(n).padStart(2, "0");
 const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
 const parseDate = (s) => new Date(s + "T12:00:00");
 const daysBetween = (a, b) => Math.round((parseDate(b) - parseDate(a)) / 86400000);
-const fmt = (n, d = 2) => Number(n).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmt = (n, d = 2) => Number(n).toLocaleString(LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtDate = (s) => { const d = parseDate(s); return pad(d.getDate()) + "/" + pad(d.getMonth() + 1); };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -83,23 +103,22 @@ function computeStats() {
   if (sorted.length === 0) return { sorted };
   const cfg = active().config;
   const anchor = sorted[0], latest = sorted[sorted.length - 1];
-  const consumo = Math.max(0, latest.medidor - anchor.medidor);
-  const dias = daysBetween(anchor.date, latest.date);
-  const media = dias > 0 ? consumo / dias : null;
-  const proj = media != null ? media * cfg.ciclo : null;
-  const ritmo = cfg.ideal / cfg.ciclo;
-  const saldo = cfg.ideal - consumo;
-  const diasRest = Math.max(0, cfg.ciclo - dias);
-  const porDia = diasRest > 0 ? saldo / diasRest : null;
-  const pacePct = dias / cfg.ciclo;
+  const usage = Math.max(0, latest.value - anchor.value);
+  const days = daysBetween(anchor.date, latest.date);
+  const avgPerDay = days > 0 ? usage / days : null;
+  const projection = avgPerDay != null ? avgPerDay * cfg.cycleDays : null;
+  const idealPerDay = cfg.target / cfg.cycleDays;
+  const balance = cfg.target - usage;
+  const daysLeft = Math.max(0, cfg.cycleDays - days);
+  const perDay = daysLeft > 0 ? balance / daysLeft : null;
+  const pacePct = days / cfg.cycleDays;
   let level = "ok";
-  if (proj != null) { if (proj > cfg.ideal * 1.05) level = "over"; else if (proj > cfg.ideal * 0.98) level = "warn"; }
-  else if (consumo > cfg.ideal) level = "over";
-  return { sorted, anchor, latest, consumo, dias, media, proj, ritmo, saldo, diasRest, porDia, pacePct, level };
+  if (projection != null) { if (projection > cfg.target * 1.05) level = "over"; else if (projection > cfg.target * 0.98) level = "warn"; }
+  else if (usage > cfg.target) level = "over";
+  return { sorted, anchor, latest, usage, days, avgPerDay, projection, idealPerDay, balance, daysLeft, perDay, pacePct, level };
 }
 
 const COLORS = { ok: "#37e0c8", warn: "#f6b45a", over: "#ff6b7d" };
-const STATUS = { ok: "Dentro da meta", warn: "Perto do limite", over: "Acima da meta" };
 
 /* ================= visual builders ================= */
 function meterHTML(v) {
@@ -119,7 +138,7 @@ function tankSVG(fillPct, pacePct, color) {
   const paceY = bot - Math.max(0, Math.min(1, pacePct)) * span;
   const wave = "M0 10 Q25 2 50 10 T100 10 T150 10 T200 10 T250 10 T300 10 V" + H + " H0 Z";
   let ticks = "";
-  [0.25, 0.5, 0.75].forEach((t) => { const y = bot - t * span; ticks += '<line x1="8" x2="14" y1="' + y + '" y2="' + y + '" stroke="#1d4257" stroke-width="1.5"/>'; });
+  [0.25, 0.5, 0.75].forEach((tk) => { const y = bot - tk * span; ticks += '<line x1="8" x2="14" y1="' + y + '" y2="' + y + '" stroke="#1d4257" stroke-width="1.5"/>'; });
   let water = "";
   if (c > 0.001) {
     water =
@@ -132,7 +151,7 @@ function tankSVG(fillPct, pacePct, color) {
   if (pacePct > 0 && pacePct < 1.02) {
     pace =
       '<line x1="6" x2="' + (W - 6) + '" y1="' + paceY + '" y2="' + paceY + '" stroke="#e9f6f7" stroke-width="1.5" stroke-dasharray="4 4" opacity=".7"/>' +
-      '<text x="' + (W - 8) + '" y="' + (paceY - 5) + '" font-size="9" fill="#e9f6f7" opacity=".8" text-anchor="end" font-family="Space Mono">meta hoje</text>';
+      '<text x="' + (W - 8) + '" y="' + (paceY - 5) + '" font-size="9" fill="#e9f6f7" opacity=".8" text-anchor="end" font-family="Space Mono">' + t("tank.targetToday") + '</text>';
   }
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" style="flex:none">' +
     '<defs><clipPath id="tc"><rect x="8" y="' + top + '" width="' + (W - 16) + '" height="' + span + '" rx="14"/></clipPath>' +
@@ -143,12 +162,12 @@ function tankSVG(fillPct, pacePct, color) {
     '<rect x="8" y="' + top + '" width="' + (W - 16) + '" height="' + span + '" rx="14" fill="none" stroke="#2a5470" stroke-width="2"/></svg>';
 }
 
-function chartSVG(data, ideal, ciclo, color) {
+function chartSVG(data, target, cycleDays, color) {
   const W = 320, H = 180, pl = 34, pr = 12, pt = 12, pb = 24;
   const iw = W - pl - pr, ih = H - pt - pb;
-  const maxC = Math.max(ideal, ...data.map((d) => d.consumo), 0.01);
-  const yMax = maxC * 1.12;
-  const xf = (d) => pl + (Math.min(d, ciclo) / ciclo) * iw;
+  const maxUsage = Math.max(target, ...data.map((d) => d.usage), 0.01);
+  const yMax = maxUsage * 1.12;
+  const xf = (d) => pl + (Math.min(d, cycleDays) / cycleDays) * iw;
   const yf = (v) => pt + ih - (v / yMax) * ih;
   let grid = "";
   for (let i = 0; i <= 4; i++) {
@@ -156,36 +175,36 @@ function chartSVG(data, ideal, ciclo, color) {
     grid += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + gy + '" y2="' + gy + '" stroke="#1d4257" stroke-dasharray="3 3"/>';
     grid += '<text x="' + (pl - 5) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="#7fa0b0" font-family="Space Mono">' + val.toFixed(0) + "</text>";
   }
-  const il = '<line x1="' + xf(0) + '" y1="' + yf(0) + '" x2="' + xf(ciclo) + '" y2="' + yf(ideal) + '" stroke="#57b0e6" stroke-width="1.5" stroke-dasharray="5 4"/>';
-  const pts = data.map((d) => xf(d.dia) + "," + yf(d.consumo)).join(" ");
+  const targetLine = '<line x1="' + xf(0) + '" y1="' + yf(0) + '" x2="' + xf(cycleDays) + '" y2="' + yf(target) + '" stroke="#57b0e6" stroke-width="1.5" stroke-dasharray="5 4"/>';
+  const pts = data.map((d) => xf(d.day) + "," + yf(d.usage)).join(" ");
   const line = data.length > 1 ? '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' : "";
-  const dots = data.map((d) => '<circle cx="' + xf(d.dia) + '" cy="' + yf(d.consumo) + '" r="3.5" fill="' + color + '"/>').join("");
+  const dots = data.map((d) => '<circle cx="' + xf(d.day) + '" cy="' + yf(d.usage) + '" r="3.5" fill="' + color + '"/>').join("");
   const xlab = '<text x="' + pl + '" y="' + (H - 6) + '" font-size="9" fill="#7fa0b0" font-family="Space Mono">0</text>' +
-    '<text x="' + (W - pr) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="#7fa0b0" font-family="Space Mono">' + ciclo + "d</text>";
-  return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="display:block">' + grid + il + line + dots + xlab + "</svg>";
+    '<text x="' + (W - pr) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="#7fa0b0" font-family="Space Mono">' + cycleDays + "d</text>";
+  return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="display:block">' + grid + targetLine + line + dots + xlab + "</svg>";
 }
 
 /* ================= reading form (shared) ================= */
-function readingForm(prefix, defaultMed, submitAction, submitLabel) {
+function readingForm(prefix, defaultValue, submitAction, submitLabel) {
   return (
     '<div class="two">' +
-      '<div class="field"><label class="flabel">Data da leitura</label>' +
+      '<div class="field"><label class="flabel">' + t("form.dateLabel") + '</label>' +
         '<input class="input" type="date" id="' + prefix + '-date" max="' + todayStr() + '" value="' + todayStr() + '"></div>' +
-      '<div class="field"><label class="flabel">Medidor (m³)</label>' +
-        '<input class="input" inputmode="decimal" id="' + prefix + '-med" placeholder="ex: 1234,567" value="' + (defaultMed || "") + '"></div>' +
+      '<div class="field"><label class="flabel">' + t("form.valueLabel") + '</label>' +
+        '<input class="input" inputmode="decimal" id="' + prefix + '-value" placeholder="' + t("form.valuePlaceholder") + '" value="' + (defaultValue || "") + '"></div>' +
     "</div>" +
     '<div class="warn" id="' + prefix + '-warn" style="display:none"></div>' +
     '<button class="btn pri" data-action="' + submitAction + '">' + icon("check") + " " + submitLabel + "</button>"
   );
 }
-function readReading(prefix, minMed) {
+function readReading(prefix, minValue) {
   const date = document.getElementById(prefix + "-date").value;
-  const raw = document.getElementById(prefix + "-med").value;
+  const raw = document.getElementById(prefix + "-value").value;
   const num = parseFloat(String(raw).replace(",", "."));
   const warn = document.getElementById(prefix + "-warn");
-  if (!date || isNaN(num)) { warn.innerHTML = icon("alert", 14) + " Preencha a data e o valor do medidor."; warn.style.display = "flex"; return null; }
-  if (minMed != null && num < minMed) { warn.innerHTML = icon("alert", 14) + " O hidrômetro só aumenta — deve ser ≥ " + fmt(minMed, 3) + " m³."; warn.style.display = "flex"; return null; }
-  return { date, medidor: num };
+  if (!date || isNaN(num)) { warn.innerHTML = icon("alert", 14) + " " + t("form.errRequired"); warn.style.display = "flex"; return null; }
+  if (minValue != null && num < minValue) { warn.innerHTML = icon("alert", 14) + " " + t("form.errIncreasing", { min: fmt(minValue, 3) }); warn.style.display = "flex"; return null; }
+  return { date, value: num };
 }
 
 /* ================= dashboard pieces ================= */
@@ -194,16 +213,16 @@ function heroCard(s) {
   return '<div class="card">' +
     '<div style="display:flex;justify-content:center;margin-bottom:14px">' +
       '<span class="status" style="background:' + color + '22;color:' + color + '">' +
-      icon(s.level === "over" ? "alert" : s.level === "warn" ? "waves" : "check", 14) + " " + STATUS[s.level] + "</span></div>" +
-    '<div class="meterlab">Leitura atual do hidrômetro</div>' + meterHTML(s.latest.medidor) +
-    '<div class="tankrow" style="margin-top:18px">' + tankSVG(s.consumo / cfg.ideal, s.pacePct, color) +
+      icon(s.level === "over" ? "alert" : s.level === "warn" ? "waves" : "check", 14) + " " + t("status." + s.level) + "</span></div>" +
+    '<div class="meterlab">' + t("hero.currentReading") + '</div>' + meterHTML(s.latest.value) +
+    '<div class="tankrow" style="margin-top:18px">' + tankSVG(s.usage / cfg.target, s.pacePct, color) +
       '<div class="tankfacts">' +
-        '<div class="projlab">Consumo do ciclo</div>' +
-        '<div class="big" style="color:' + color + '">' + fmt(s.consumo) + '<span class="bigunit">m³</span></div>' +
-        '<div class="ofideal">de ' + fmt(cfg.ideal) + " m³ ideais</div>" +
-        '<div class="projrow"><div class="projlab">Projeção do ciclo</div>' +
-          '<div class="projval" style="color:' + color + '">' + (s.proj != null ? fmt(s.proj) + " m³" : "—") + "</div>" +
-          '<div class="ofideal">' + (s.proj != null ? fmt((s.proj / cfg.ideal) * 100, 0) + "% da meta" : "adicione leitura em outro dia") + "</div>" +
+        '<div class="projlab">' + t("hero.cycleUsage") + '</div>' +
+        '<div class="big" style="color:' + color + '">' + fmt(s.usage) + '<span class="bigunit">m³</span></div>' +
+        '<div class="ofideal">' + t("hero.ofTarget", { target: fmt(cfg.target) }) + "</div>" +
+        '<div class="projrow"><div class="projlab">' + t("hero.projection") + '</div>' +
+          '<div class="projval" style="color:' + color + '">' + (s.projection != null ? fmt(s.projection) + " m³" : "—") + "</div>" +
+          '<div class="ofideal">' + (s.projection != null ? t("hero.projectionPct", { pct: fmt((s.projection / cfg.target) * 100, 0) }) : t("hero.needMoreReadings")) + "</div>" +
         "</div></div></div></div>";
 }
 
@@ -214,46 +233,45 @@ function statsGrid(s) {
   const cfg = active().config;
   const col = (c, txt) => '<span style="color:' + c + '">' + txt + "</span>";
   return '<div class="grid">' +
-    statCard("calendar", "Dias no ciclo", s.dias + "<small> / " + cfg.ciclo + "</small>") +
-    statCard("gauge", "Média por dia", s.media != null ? fmt(s.media, 3) + "<small> m³</small>" : "—") +
-    statCard("waves", "Ritmo ideal/dia", fmt(s.ritmo, 3) + "<small> m³</small>") +
-    statCard("droplet", "Saldo restante", (s.saldo < 0 ? col("#ff6b7d", fmt(s.saldo)) : fmt(s.saldo)) + "<small> m³</small>") +
-    statCard("calendar", "Dias restantes", s.diasRest) +
-    statCard("gauge", "Pode gastar/dia", s.porDia != null ? (s.porDia < 0 ? col("#ff6b7d", "0,000") : fmt(s.porDia, 3)) + "<small> m³</small>" : "—") +
+    statCard("calendar", t("stats.daysInCycle"), s.days + "<small> / " + cfg.cycleDays + "</small>") +
+    statCard("gauge", t("stats.avgPerDay"), s.avgPerDay != null ? fmt(s.avgPerDay, 3) + "<small> m³</small>" : "—") +
+    statCard("waves", t("stats.idealPerDay"), fmt(s.idealPerDay, 3) + "<small> m³</small>") +
+    statCard("droplet", t("stats.balance"), (s.balance < 0 ? col("#ff6b7d", fmt(s.balance)) : fmt(s.balance)) + "<small> m³</small>") +
+    statCard("calendar", t("stats.daysLeft"), s.daysLeft) +
+    statCard("gauge", t("stats.canSpendPerDay"), s.perDay != null ? (s.perDay < 0 ? col("#ff6b7d", "0,000") : fmt(s.perDay, 3)) + "<small> m³</small>" : "—") +
     "</div>";
 }
 
 function chartCard(s) {
   const cfg = active().config, color = COLORS[s.level];
-  const data = s.sorted.map((r) => ({ dia: daysBetween(s.sorted[0].date, r.date), consumo: Math.max(0, r.medidor - s.sorted[0].medidor) }));
+  const data = s.sorted.map((r) => ({ day: daysBetween(s.sorted[0].date, r.date), usage: Math.max(0, r.value - s.sorted[0].value) }));
   if (data.length < 2) return "";
-  return '<div class="card"><div class="secttl">' + icon("waves", 14) + " Trajetória do consumo</div>" +
-    chartSVG(data, cfg.ideal, cfg.ciclo, color) +
-    '<div class="hint">A linha azul tracejada é o ritmo ideal (chegar a ' + fmt(cfg.ideal) + " m³ no dia " + cfg.ciclo +
-    "). Ficar <strong>abaixo</strong> dela significa consumo controlado.</div></div>";
+  return '<div class="card"><div class="secttl">' + icon("waves", 14) + " " + t("chart.title") + "</div>" +
+    chartSVG(data, cfg.target, cfg.cycleDays, color) +
+    '<div class="hint">' + t("chart.hint", { target: fmt(cfg.target), cycle: cfg.cycleDays }) + "</div></div>";
 }
 
 function addSection(s) {
-  if (!ui.addOpen) return '<button class="btn pri" data-action="add-toggle">' + icon("plus", 18) + " Registrar nova leitura</button>";
-  return '<div class="card"><div class="secttl">' + icon("plus", 14) + " Nova leitura</div>" +
-    '<p class="hint" style="margin-top:0;margin-bottom:14px">Última registrada: <strong>' + fmt(s.latest.medidor, 3) + " m³</strong> em " + fmtDate(s.latest.date) + ".</p>" +
-    readingForm("add", "", "add-submit", "Adicionar leitura") +
-    '<button class="btn ghost" style="margin-top:2px" data-action="add-cancel">Cancelar</button></div>';
+  if (!ui.addOpen) return '<button class="btn pri" data-action="add-toggle">' + icon("plus", 18) + " " + t("add.open") + "</button>";
+  return '<div class="card"><div class="secttl">' + icon("plus", 14) + " " + t("add.title") + "</div>" +
+    '<p class="hint" style="margin-top:0;margin-bottom:14px">' + t("add.lastRecorded", { value: fmt(s.latest.value, 3), date: fmtDate(s.latest.date) }) + "</p>" +
+    readingForm("add", "", "add-submit", t("add.submit")) +
+    '<button class="btn ghost" style="margin-top:2px" data-action="add-cancel">' + t("common.cancel") + "</button></div>";
 }
 
 function readingsCard(s) {
   let rows = "";
   s.sorted.forEach((r, i) => {
     const prev = i > 0 ? s.sorted[i - 1] : null;
-    const delta = prev ? r.medidor - prev.medidor : 0;
+    const delta = prev ? r.value - prev.value : 0;
     const dd = prev ? daysBetween(prev.date, r.date) : 0;
-    rows += '<div class="read"><span class="rdate">' + fmtDate(r.date) + '</span><span class="rmed">' + fmt(r.medidor, 3) + " m³</span>" +
+    rows += '<div class="read"><span class="rdate">' + fmtDate(r.date) + '</span><span class="rmed">' + fmt(r.value, 3) + " m³</span>" +
       (i === 0
-        ? '<span class="anchor">LEITURA BASE</span>'
-        : '<span class="rdelta">+' + fmt(delta) + " m³<small>" + dd + (dd === 1 ? " dia" : " dias") + "</small></span>") +
+        ? '<span class="anchor">' + t("readings.baseTag") + '</span>'
+        : '<span class="rdelta">+' + fmt(delta) + " m³<small>" + dd + " " + (dd === 1 ? t("reading.day") : t("reading.days")) + "</small></span>") +
       '<button class="del" data-action="del" data-id="' + r.id + '">' + icon("trash", 15) + "</button></div>";
   });
-  return '<div class="card"><div class="secttl">' + icon("droplet", 14) + " Leituras registradas</div>" + rows + "</div>";
+  return '<div class="card"><div class="secttl">' + icon("droplet", 14) + " " + t("readings.title") + "</div>" + rows + "</div>";
 }
 
 /* ================= meters bar ================= */
@@ -264,7 +282,7 @@ function metersBar() {
     return '<button class="mchip' + (act ? " act" : "") + '" data-action="switch-meter" data-id="' + m.id + '">' +
       icon("home", 13) + esc(m.name) + "</button>";
   }).join("");
-  const add = '<button class="mchip add" data-action="add-meter">' + icon("plus", 14) + " Novo</button>";
+  const add = '<button class="mchip add" data-action="add-meter">' + icon("plus", 14) + " " + t("meters.new") + "</button>";
   return '<div class="meters">' + chips + add + "</div>";
 }
 
@@ -273,18 +291,18 @@ function onboarding() {
   const m = active();
   if (ui.obStep === 1) {
     return '<div class="card"><div class="empty"><div class="ic">' + icon("droplet", 30, true) + "</div>" +
-      "<h2>Vamos começar</h2><p>Dê um nome ao medidor, defina a meta de consumo e a duração do ciclo de faturamento.</p></div>" +
-      '<div class="field"><label class="flabel">Nome do medidor</label>' +
-        '<input class="input" id="ob-name" style="font-family:Inter" value="' + esc(m.name) + '" placeholder="ex: Casa, Chácara"></div>' +
-      '<div class="two"><div class="field"><label class="flabel">Consumo ideal (m³)</label>' +
-        '<input class="input" inputmode="decimal" id="ob-ideal" value="' + m.config.ideal + '" placeholder="11"></div>' +
-      '<div class="field"><label class="flabel">Ciclo (dias)</label>' +
-        '<input class="input" inputmode="numeric" id="ob-ciclo" value="' + m.config.ciclo + '" placeholder="30"></div></div>' +
-      '<button class="btn pri" data-action="ob-next">Continuar</button></div>';
+      "<h2>" + t("onboarding.step1Title") + "</h2><p>" + t("onboarding.step1Desc") + "</p></div>" +
+      '<div class="field"><label class="flabel">' + t("onboarding.nameLabel") + '</label>' +
+        '<input class="input" id="ob-name" style="font-family:Inter" value="' + esc(m.name) + '" placeholder="' + t("onboarding.namePlaceholder") + '"></div>' +
+      '<div class="two"><div class="field"><label class="flabel">' + t("onboarding.targetLabel") + '</label>' +
+        '<input class="input" inputmode="decimal" id="ob-target" value="' + m.config.target + '" placeholder="11"></div>' +
+      '<div class="field"><label class="flabel">' + t("onboarding.cycleLabel") + '</label>' +
+        '<input class="input" inputmode="numeric" id="ob-cycle" value="' + m.config.cycleDays + '" placeholder="30"></div></div>' +
+      '<button class="btn pri" data-action="ob-next">' + t("onboarding.continue") + "</button></div>";
   }
   return '<div class="card"><div class="empty"><div class="ic">' + icon("droplet", 30, true) + "</div>" +
-    "<h2>Leitura inicial</h2><p>Informe a data e o valor do hidrômetro na última leitura oficial da concessionária. É o ponto de partida do ciclo.</p></div>" +
-    readingForm("ob", "", "ob-start", "Registrar leitura inicial") + "</div>";
+    "<h2>" + t("onboarding.step2Title") + "</h2><p>" + t("onboarding.step2Desc") + "</p></div>" +
+    readingForm("ob", "", "ob-start", t("onboarding.step2Submit")) + "</div>";
 }
 
 /* ================= render ================= */
@@ -296,8 +314,8 @@ function render() {
   const s = computeStats();
 
   let head = '<div class="head"><div class="logo">' + icon("droplet", 24, true) + "</div>" +
-    '<div style="min-width:0"><div class="title">Aquametro</div><div class="sub">' +
-      (multi ? esc(m.name) : "ciclo de " + cfg.ciclo + " dias") + '</div></div>' +
+    '<div style="min-width:0"><div class="title">' + t("app.name") + '</div><div class="sub">' +
+      (multi ? esc(m.name) : t("header.cycleSub", { cycle: cfg.cycleDays })) + '</div></div>' +
     '<button class="icbtn first" data-action="open-modal" data-modal="history">' + icon("history", 18) + "</button>" +
     '<button class="icbtn" data-action="open-modal" data-modal="settings">' + icon("settings", 18) + "</button></div>";
 
@@ -306,7 +324,7 @@ function render() {
     body = onboarding();
   } else {
     body = heroCard(s) + statsGrid(s) + chartCard(s) + addSection(s) + readingsCard(s) +
-      '<button class="btn ghost" data-action="open-modal" data-modal="newcycle">' + icon("rotate", 17) + " Nova leitura oficial (novo ciclo)</button>";
+      '<button class="btn ghost" data-action="open-modal" data-modal="newcycle">' + icon("rotate", 17) + " " + t("header.newOfficial") + "</button>";
   }
   app.innerHTML = head + metersBar() + body;
   renderModal();
@@ -320,38 +338,38 @@ function renderModal() {
   const cur = active();
   let title = "", inner = "";
   if (ui.modal === "settings") {
-    title = "Ajustes do medidor";
+    title = t("settings.title");
     const delBlock = state.meters.length > 1
       ? (ui.confirmDel
-          ? '<div class="warn" style="margin-top:6px">' + icon("alert", 14) + ' Remover "' + esc(cur.name) + '" e todas as suas leituras? Não dá pra desfazer.</div>' +
-            '<div class="two"><button class="btn ghost" style="margin:0" data-action="meter-del-cancel">Cancelar</button>' +
-            '<button class="btn danger" style="margin:0" data-action="meter-del-confirm">' + icon("trash", 16) + " Remover</button></div>"
-          : '<button class="btn danger" style="margin-bottom:0" data-action="meter-del">' + icon("trash", 16) + " Remover este medidor</button>")
+          ? '<div class="warn" style="margin-top:6px">' + icon("alert", 14) + " " + t("settings.deleteConfirm", { name: esc(cur.name) }) + "</div>" +
+            '<div class="two"><button class="btn ghost" style="margin:0" data-action="meter-del-cancel">' + t("common.cancel") + "</button>" +
+            '<button class="btn danger" style="margin:0" data-action="meter-del-confirm">' + icon("trash", 16) + " " + t("settings.delete") + "</button></div>"
+          : '<button class="btn danger" style="margin-bottom:0" data-action="meter-del">' + icon("trash", 16) + " " + t("settings.deleteMeter") + "</button>")
       : "";
     inner =
-      '<div class="field"><label class="flabel">Nome do medidor</label>' +
+      '<div class="field"><label class="flabel">' + t("settings.nameLabel") + '</label>' +
         '<input class="input" id="set-name" style="font-family:Inter" value="' + esc(cur.name) + '"></div>' +
-      '<div class="field"><label class="flabel">Consumo ideal por ciclo (m³)</label>' +
-        '<input class="input" inputmode="decimal" id="set-ideal" value="' + cur.config.ideal + '"></div>' +
-      '<div class="field"><label class="flabel">Duração do ciclo (dias)</label>' +
-        '<input class="input" inputmode="numeric" id="set-ciclo" value="' + cur.config.ciclo + '"></div>' +
-      '<p class="hint" style="margin-bottom:16px">As concessionárias costumam faturar em ciclos de ~30 dias. Ajuste conforme sua conta. Isso não apaga suas leituras.</p>' +
-      '<button class="btn pri" data-action="set-save">' + icon("check", 17) + " Salvar ajustes</button>" +
+      '<div class="field"><label class="flabel">' + t("settings.targetLabel") + '</label>' +
+        '<input class="input" inputmode="decimal" id="set-target" value="' + cur.config.target + '"></div>' +
+      '<div class="field"><label class="flabel">' + t("settings.cycleLabel") + '</label>' +
+        '<input class="input" inputmode="numeric" id="set-cycle" value="' + cur.config.cycleDays + '"></div>' +
+      '<p class="hint" style="margin-bottom:16px">' + t("settings.hint") + "</p>" +
+      '<button class="btn pri" data-action="set-save">' + icon("check", 17) + " " + t("settings.save") + "</button>" +
       delBlock;
   } else if (ui.modal === "newcycle") {
-    title = "Nova leitura oficial";
+    title = t("newcycle.title");
     inner =
-      '<p class="hint" style="margin-bottom:16px">Use quando a concessionária fizer uma nova leitura. O ciclo atual será fechado e guardado no histórico, e esta passa a ser a leitura base do novo ciclo.</p>' +
-      readingForm("nc", s.latest ? s.latest.medidor : "", "nc-submit", "Iniciar novo ciclo");
+      '<p class="hint" style="margin-bottom:16px">' + t("newcycle.desc") + "</p>" +
+      readingForm("nc", s.latest ? s.latest.value : "", "nc-submit", t("newcycle.submit"));
   } else if (ui.modal === "history") {
-    title = "Histórico de ciclos";
+    title = t("history.title");
     if (cur.history.length === 0) {
-      inner = '<p class="hint">Nenhum ciclo fechado ainda. Ao registrar uma nova leitura oficial, o ciclo atual aparece aqui.</p>';
+      inner = '<p class="hint">' + t("history.empty") + "</p>";
     } else {
       inner = cur.history.map((h) =>
         '<div class="histrow"><span style="color:#7fa0b0;font-family:Space Mono">' + fmtDate(h.start) + " – " + fmtDate(h.end) + "</span>" +
-        '<span style="font-family:Space Grotesk;font-weight:600;color:' + (h.consumo > h.ideal ? "#ff6b7d" : "#37e0c8") + '">' +
-        fmt(h.consumo) + " / " + fmt(h.ideal) + " m³</span></div>").join("");
+        '<span style="font-family:Space Grotesk;font-weight:600;color:' + (h.usage > h.target ? "#ff6b7d" : "#37e0c8") + '">' +
+        fmt(h.usage) + " / " + fmt(h.target) + " m³</span></div>").join("");
     }
   }
   m.innerHTML = '<div class="ov" data-action="close-modal"><div class="sheet" data-stop="1">' +
@@ -366,74 +384,74 @@ function renderInstall() {
   if (deferredPrompt) {
     el.style.display = "flex";
     el.className = "install";
-    el.innerHTML = icon("download", 18) + "<span>Instale o app na tela inicial</span><button data-action='install'>Instalar</button>";
+    el.innerHTML = icon("download", 18) + "<span>" + t("install.prompt") + "</span><button data-action='install'>" + t("install.button") + "</button>";
   } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
     el.style.display = "flex";
     el.className = "install";
-    el.innerHTML = icon("download", 18) + "<span>Para instalar: toque em Compartilhar → Adicionar à Tela de Início.</span>";
+    el.innerHTML = icon("download", 18) + "<span>" + t("install.ios") + "</span>";
   } else {
     el.style.display = "none";
   }
 }
 
 /* ================= actions ================= */
-function startCycle(date, medidor) {
+function startCycle(date, value) {
   const m = active();
   const s = computeStats();
   if (s.sorted && s.sorted.length >= 2) {
     m.history.unshift({
       id: uid(), start: s.sorted[0].date, end: s.sorted[s.sorted.length - 1].date,
-      consumo: s.consumo, ideal: m.config.ideal, dias: s.dias,
+      usage: s.usage, target: m.config.target, days: s.days,
     });
     m.history = m.history.slice(0, 12);
   }
-  m.readings = [{ id: uid(), date, medidor }];
+  m.readings = [{ id: uid(), date, value }];
   save();
 }
 
 function deleteMeter(id) {
   state.meters = state.meters.filter((m) => m.id !== id);
-  if (!state.meters.length) state.meters = [newMeter("Medidor 1")];
+  if (!state.meters.length) state.meters = [newMeter(t("meter.defaultName", { n: 1 }))];
   if (state.activeMeterId === id || !active()) state.activeMeterId = state.meters[0].id;
   save();
 }
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-action]");
-  if (!t) return;
-  const a = t.dataset.action;
+  const target = e.target.closest("[data-action]");
+  if (!target) return;
+  const a = target.dataset.action;
 
   // Overlay carries close-modal; only close on a direct backdrop tap (not taps inside the sheet)
   if (a === "close-modal") {
-    if (t.classList.contains("ov") && e.target !== t) return;
+    if (target.classList.contains("ov") && e.target !== target) return;
     ui.modal = null; ui.confirmDel = false; render(); return;
   }
 
   if (a === "ob-next") {
     const m = active();
     const nm = document.getElementById("ob-name").value.trim();
-    const i = parseFloat(String(document.getElementById("ob-ideal").value).replace(",", "."));
-    const c = parseInt(document.getElementById("ob-ciclo").value, 10);
+    const tg = parseFloat(String(document.getElementById("ob-target").value).replace(",", "."));
+    const cy = parseInt(document.getElementById("ob-cycle").value, 10);
     if (nm) m.name = nm;
-    m.config = { ideal: !isNaN(i) && i > 0 ? i : 11, ciclo: !isNaN(c) && c > 0 ? c : 30 };
+    m.config = { target: !isNaN(tg) && tg > 0 ? tg : 11, cycleDays: !isNaN(cy) && cy > 0 ? cy : 30 };
     save(); ui.obStep = 2; render();
   } else if (a === "ob-start") {
     const r = readReading("ob", null); if (!r) return;
-    active().readings = [{ id: uid(), date: r.date, medidor: r.medidor }]; save(); render();
+    active().readings = [{ id: uid(), date: r.date, value: r.value }]; save(); render();
   } else if (a === "add-toggle") { ui.addOpen = true; render(); }
   else if (a === "add-cancel") { ui.addOpen = false; render(); }
   else if (a === "add-submit") {
     const s = computeStats();
-    const r = readReading("add", s.latest.medidor); if (!r) return;
-    active().readings.push({ id: uid(), date: r.date, medidor: r.medidor }); save(); ui.addOpen = false; render();
+    const r = readReading("add", s.latest.value); if (!r) return;
+    active().readings.push({ id: uid(), date: r.date, value: r.value }); save(); ui.addOpen = false; render();
   } else if (a === "del") {
-    active().readings = active().readings.filter((x) => x.id !== t.dataset.id); save(); render();
+    active().readings = active().readings.filter((x) => x.id !== target.dataset.id); save(); render();
   } else if (a === "switch-meter") {
-    state.activeMeterId = t.dataset.id;
+    state.activeMeterId = target.dataset.id;
     ui.addOpen = false; ui.modal = null; ui.obStep = 1; ui.confirmDel = false;
     save(); render();
   } else if (a === "add-meter") {
-    const m = newMeter("Medidor " + (state.meters.length + 1));
+    const m = newMeter(t("meter.defaultName", { n: state.meters.length + 1 }));
     state.meters.push(m);
     state.activeMeterId = m.id;
     ui.addOpen = false; ui.modal = null; ui.obStep = 1; ui.confirmDel = false;
@@ -443,18 +461,18 @@ document.addEventListener("click", (e) => {
   else if (a === "meter-del-confirm") {
     deleteMeter(state.activeMeterId);
     ui.confirmDel = false; ui.modal = null; ui.addOpen = false; ui.obStep = 1; render();
-  } else if (a === "open-modal") { ui.modal = t.dataset.modal; ui.confirmDel = false; render(); }
+  } else if (a === "open-modal") { ui.modal = target.dataset.modal; ui.confirmDel = false; render(); }
   else if (a === "set-save") {
     const m = active();
     const nm = document.getElementById("set-name").value.trim();
-    const i = parseFloat(String(document.getElementById("set-ideal").value).replace(",", "."));
-    const c = parseInt(document.getElementById("set-ciclo").value, 10);
+    const tg = parseFloat(String(document.getElementById("set-target").value).replace(",", "."));
+    const cy = parseInt(document.getElementById("set-cycle").value, 10);
     if (nm) m.name = nm;
-    m.config = { ideal: !isNaN(i) && i > 0 ? i : m.config.ideal, ciclo: !isNaN(c) && c > 0 ? c : m.config.ciclo };
+    m.config = { target: !isNaN(tg) && tg > 0 ? tg : m.config.target, cycleDays: !isNaN(cy) && cy > 0 ? cy : m.config.cycleDays };
     save(); ui.modal = null; ui.confirmDel = false; render();
   } else if (a === "nc-submit") {
     const r = readReading("nc", null); if (!r) return;
-    startCycle(r.date, r.medidor); ui.modal = null; ui.addOpen = false; render();
+    startCycle(r.date, r.value); ui.modal = null; ui.addOpen = false; render();
   } else if (a === "install") {
     if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.finally(() => { deferredPrompt = null; renderInstall(); }); }
   }

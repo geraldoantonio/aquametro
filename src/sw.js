@@ -1,9 +1,10 @@
-const CACHE = "controle-agua-v3";
+const CACHE = "controle-agua-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/styles.css",
+  "./js/i18n.js",
   "./js/app.js",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
