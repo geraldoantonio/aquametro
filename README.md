@@ -8,7 +8,8 @@ Tudo roda **100% no navegador** — sem back-end, sem cadastro. Os dados ficam s
 
 ## Funcionalidades
 
-- **Registro de leituras** do hidrômetro (data + valor em m³), com validação de que o medidor só aumenta.
+- **Registro de leituras** do hidrômetro (data + valor em m³), com validação de que o medidor só aumenta. O valor é digitado em dois campos — m³ (parte preta) e litros (parte vermelha) —, espelhando o hidrômetro, com teclado numérico no celular.
+- **Leitura pela câmera (OCR)**: aponte a câmera para o visor do hidrômetro e o app reconhece os dígitos automaticamente, **100% no dispositivo** e offline. O reconhecimento é assistido — ele pré-preenche a leitura e destaca dígitos de baixa confiança, mas você confere e confirma antes de salvar.
 - **Painel de consumo** com hidrômetro visual, tanque animado e status (dentro da meta / perto do limite / acima da meta).
 - **Estatísticas do ciclo**: dias decorridos, média por dia, ritmo ideal, saldo restante, dias restantes e quanto pode gastar por dia.
 - **Gráfico de trajetória** comparando o consumo real com o ritmo ideal.
@@ -72,7 +73,13 @@ Configuração do projeto na Cloudflare Pages:
     ├── css/
     │   └── styles.css          # Estilos
     ├── js/
+    │   ├── version.js          # Versão do app (semver) — fonte única
+    │   ├── i18n.js             # Traduções (pt-BR) + helper t()
+    │   ├── ocr.js              # Câmera + OCR no dispositivo
     │   └── app.js              # Lógica do app
+    ├── vendor/
+    │   └── tesseract/          # Tesseract.js vendorizado (OCR, carregado sob demanda)
+    ├── ocr-test/               # Página de teste do OCR (dev — não linkada, fora do app instalado)
     ├── manifest.webmanifest    # Manifesto do PWA
     ├── sw.js                   # Service Worker (cache offline)
     └── assets/
@@ -84,7 +91,7 @@ Configuração do projeto na Cloudflare Pages:
 
 ## Tecnologia
 
-- HTML, CSS e JavaScript puros (vanilla), sem frameworks nem dependências externas.
+- HTML, CSS e JavaScript puros (vanilla), sem frameworks nem bundlers. A única dependência é o **Tesseract.js** (motor de OCR), incluído como arquivos estáticos em `src/vendor/` e carregado apenas quando você usa a câmera — nada é baixado de terceiros em tempo de execução.
 - Persistência local via `localStorage`.
 - PWA com Service Worker (cache-first) para uso offline.
 
